@@ -45,6 +45,7 @@ impl Default for Text2dBundle {
             main_pass: MainPass {},
             calculated_size: CalculatedSize {
                 size: Size::default(),
+                dirty: false,
             },
         }
     }

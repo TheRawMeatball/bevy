@@ -13,4 +13,5 @@ pub struct Text {
 #[derive(Default, Copy, Clone, Debug)]
 pub struct CalculatedSize {
     pub size: Size,
+    pub dirty: bool,
 }

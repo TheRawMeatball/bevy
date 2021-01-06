@@ -16,7 +16,6 @@ pub(crate) fn anchor_node_system(
         &AnchorLayout,
         Flags<AnchorLayout>,
         Option<&CalculatedSize>,
-        Option<Flags<CalculatedSize>>,
         Option<&Children>,
         Option<Flags<Children>>,
     )>,
@@ -30,11 +29,11 @@ pub(crate) fn anchor_node_system(
         if window_size != *local {
             *local = window_size;
             for root in roots.iter() {
-                solver::solve(root, window_size, 50., false, &nodes, &mut transforms);
+                solver::solve(root, window_size, false, &nodes, &mut transforms);
             }
         } else {
             for root in roots.iter() {
-                solver::solve(root, window_size, 50., true, &nodes, &mut transforms);
+                solver::solve(root, window_size, true, &nodes, &mut transforms);
             }
         }
     }

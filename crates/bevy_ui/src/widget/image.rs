@@ -27,10 +27,16 @@ pub fn image_node_system(
             .and_then(|material| material.texture.as_ref())
             .and_then(|texture_handle| textures.get(texture_handle))
         {
-            calculated_size.size = Size {
+            let new_cs = Size {
                 width: texture.size.width as f32,
                 height: texture.size.height as f32,
             };
+            if new_cs == calculated_size.size {
+                calculated_size.dirty = false;
+            } else {
+                calculated_size.size = new_cs;
+                calculated_size.dirty = true;
+            }
         }
     }
 }

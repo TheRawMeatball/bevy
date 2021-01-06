@@ -1,7 +1,7 @@
 // use crate::{Node, Style, Val};
 use crate::{AnchorLayout, AxisConstraint, Constraint, Node};
 use bevy_asset::Assets;
-use bevy_ecs::{Changed, Entity, Local, Or, Query, QuerySet, Res, ResMut, With};
+use bevy_ecs::{Entity, Flags, Query, Res, ResMut};
 use bevy_math::{Size, Vec2};
 use bevy_render::{
     draw::{Draw, DrawContext, Drawable},
@@ -80,17 +80,21 @@ fn solve_value(constraint: &AxisConstraint, space: f32, anchors: (f32, f32)) -> 
 /// new computed glyphs from the layout
 #[allow(clippy::too_many_arguments)]
 pub fn text_system(
-    mut queued_text: Local<QueuedText>,
     mut textures: ResMut<Assets<Texture>>,
     fonts: Res<Assets<Font>>,
     windows: Res<Windows>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     mut font_atlas_set_storage: ResMut<Assets<FontAtlasSet>>,
     mut text_pipeline: ResMut<DefaultTextPipeline>,
-    nodes: Query<&Node>,
-    mut text_queries: QuerySet<(
-        Query<Entity, Or<(With<Text>, Changed<AnchorLayout>, Changed<Node>)>>,
-        Query<(&Text, &AnchorLayout, &mut CalculatedSize)>,
+    nodes: Query<(&Node, Flags<Node>)>,
+    mut text_query: Query<(
+        Entity,
+        &Text,
+        Flags<Text>,
+        &AnchorLayout,
+        Flags<AnchorLayout>,
+        Option<&Parent>,
+        &mut CalculatedSize,
     )>,
 ) {
     let (scale_factor, window_size) = if let Some(window) = windows.get_primary() {
@@ -104,27 +108,18 @@ pub fn text_system(
 
     let inv_scale_factor = 1. / scale_factor;
 
-    // Adds all entities where the text or the style has changed to the local queue
-    for entity in text_queries.q0_mut().iter_mut() {
-        queued_text.entities.push(entity);
-    }
-
-    if queued_text.entities.is_empty() {
-        return;
-    }
-
     // Computes all text in the local queue
     let mut new_queue = Vec::new();
-    let query = text_queries.q1_mut();
-    for entity in queued_text.entities.drain(..) {
-        if let Ok((text, layout, mut calculated_size)) = query.get_mut(entity) {
-            let parent = None;
-            let parent = parent.map(|parent: Parent| nodes.get(*parent).unwrap());
-            let node_size = text_constraint(
-                &layout,
-                parent.map(|p| p.size).unwrap_or(window_size),
-                scale_factor,
-            );
+    for (entity, text, text_flags, layout, layout_flags, parent, mut calculated_size) in
+        text_query.iter_mut()
+    {
+        let (parent_size, parent_changed) = parent
+            .map(|&parent| nodes.get(*parent).unwrap())
+            .map(|(parent, flags)| (parent.size, flags.changed()))
+            .unwrap_or((window_size, false));
+
+        if text_flags.changed() || layout_flags.changed() || parent_changed {
+            let node_size = text_constraint(&layout, parent_size, scale_factor);
 
             match text_pipeline.queue_text(
                 entity,
@@ -153,13 +148,14 @@ pub fn text_system(
                         width: scale_value(text_layout_info.size.width, inv_scale_factor),
                         height: scale_value(text_layout_info.size.height, inv_scale_factor),
                     };
+                    calculated_size.dirty = true;
                     print!("");
                 }
             }
+        } else {
+            calculated_size.dirty = false;
         }
     }
-
-    queued_text.entities = new_queue;
 }
 
 #[allow(clippy::too_many_arguments)]

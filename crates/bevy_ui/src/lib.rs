@@ -38,13 +38,13 @@ impl Plugin for UiPlugin {
             stage::UI,
             SystemStage::parallel(),
         )
+        // TODO: Change to dependency of text_system once system dependencies land
+        .add_stage_before(stage::UI, "layout", SystemStage::single(anchor_node_system.system()))
         .add_system_to_stage(bevy_app::stage::PRE_UPDATE, ui_focus_system.system())
         // add these stages to front because these must run before transform update systems
         .add_system_to_stage(stage::UI, widget::text_system.system())
         .add_system_to_stage(stage::UI, widget::image_node_system.system())
         .add_system_to_stage(stage::UI, ui_z_system.system())
-        // .add_system_to_stage(stage::UI, flex_node_system.system())
-        .add_system_to_stage(stage::UI, anchor_node_system.system())
         .add_system_to_stage(bevy_render::stage::DRAW, widget::draw_text_system.system());
 
         let resources = app.resources();

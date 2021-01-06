@@ -9,18 +9,14 @@ use crate::Node;
 
 use super::*;
 
-pub const UI_Z_STEP: f32 = -0.001;
-
 pub(crate) fn solve(
     solve_entity: Entity,
     space: Vec2,
-    active_z: f32,
     respect_flags: bool,
     nodes: &Query<(
         &AnchorLayout,
         Flags<AnchorLayout>,
         Option<&CalculatedSize>,
-        Option<Flags<CalculatedSize>>,
         Option<&Children>,
         Option<Flags<Children>>,
     )>,
@@ -28,14 +24,13 @@ pub(crate) fn solve(
 ) {
     let (mut target_transform, mut render_data, cache) = mutables.get_mut(solve_entity).unwrap();
     let target_size = &mut render_data.size;
-    let (solve_target, node_flags, c_size, c_size_flags, children, children_flags) =
+    let (solve_target, node_flags, c_size, children, children_flags) =
         nodes.get(solve_entity).unwrap();
 
-    if respect_flags && !node_flags.changed() && !c_size_flags.map(|f| f.changed()).unwrap_or(false)
-    {
+    if respect_flags && !node_flags.changed() && !c_size.map(|f| f.dirty).unwrap_or(false) {
         if let Some(children) = children {
             let solve_self =
-                |transforms| solve(solve_entity, space, active_z, false, nodes, transforms);
+                |transforms| solve(solve_entity, space, false, nodes, transforms);
             let ts = *target_size;
             if solve_target.children_spread.is_some() {
                 if children_flags.unwrap().changed() {
@@ -44,18 +39,18 @@ pub(crate) fn solve(
                 }
                 for child in children.iter() {
                     let child = nodes.get(*child).unwrap();
-                    if child.1.changed() || child.3.unwrap().changed() {
+                    if child.1.changed() || child.2.map(|cs| cs.dirty).unwrap_or(false) {
                         solve_self(mutables);
                         return;
                     }
                 }
                 let cache = cache.sizes.as_ref().unwrap().clone();
                 for (child, size) in children.iter().zip(cache.iter()) {
-                    solve(*child, *size, active_z + UI_Z_STEP, true, nodes, mutables)
+                    solve(*child, *size, true, nodes, mutables)
                 }
             } else {
                 for child in children.iter() {
-                    solve(*child, ts, active_z + UI_Z_STEP, true, nodes, mutables)
+                    solve(*child, ts, true, nodes, mutables)
                 }
             }
         }
@@ -144,8 +139,8 @@ pub(crate) fn solve(
         offset += target_transform.translation.truncate();
     };
 
-    target_transform.translation = offset.extend(active_z);
-    let active_z = active_z + UI_Z_STEP;
+    target_transform.translation = offset.extend(0.);
+
 
     if let Some(children) = children {
         let ts = *target_size;
@@ -235,13 +230,13 @@ pub(crate) fn solve(
                 offset += size + spread_constraint.margin;
                 let size = calc_size(size, ts);
                 cache.push(size);
-                solve(entity, size, active_z, respect_flags, nodes, mutables);
+                solve(entity, size, respect_flags, nodes, mutables);
             }
             let (_, _, mut target_cache) = mutables.get_mut(solve_entity).unwrap();
             target_cache.sizes = Some(cache);
         } else {
             for child in children.iter() {
-                solve(*child, ts, active_z, false, nodes, mutables);
+                solve(*child, ts, false, nodes, mutables);
             }
         }
     }
