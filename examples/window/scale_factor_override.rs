@@ -23,46 +23,39 @@ fn setup(
     commands
         // ui camera
         .spawn(CameraUiBundle::default())
-        // root node
         .spawn(NodeBundle {
-            style: Style {
-                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                justify_content: JustifyContent::SpaceBetween,
+            anchor_layout: AnchorLayout {
+                anchors: Anchors::LEFT_FULL,
+                constraint: Constraint::Independent {
+                    x: AxisConstraint::DirectMarginAndSize(0., 200.),
+                    y: AxisConstraint::DoubleMargin(0., 0.),
+                },
                 ..Default::default()
             },
-            material: materials.add(Color::NONE.into()),
+            material: materials.add(Color::rgb(0.65, 0.65, 0.65).into()),
             ..Default::default()
         })
         .with_children(|parent| {
-            parent
-                // left vertical fill (border)
-                .spawn(NodeBundle {
-                    style: Style {
-                        size: Size::new(Val::Px(200.0), Val::Percent(100.0)),
-                        border: Rect::all(Val::Px(2.0)),
+            parent.spawn(TextBundle {
+                anchor_layout: AnchorLayout {
+                    anchors: Anchors::FULL,
+                    constraint: Constraint::Independent {
+                        x: AxisConstraint::DoubleMargin(5., 5.),
+                        y: AxisConstraint::FromContentSize(Alignment::ReverseMargin(5.)),
+                    },
+                    ..Default::default()
+                },
+                text: Text {
+                    value: "Example text".to_string(),
+                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                    style: TextStyle {
+                        font_size: 30.0,
+                        color: Color::WHITE,
                         ..Default::default()
                     },
-                    material: materials.add(Color::rgb(0.65, 0.65, 0.65).into()),
-                    ..Default::default()
-                })
-                .with_children(|parent| {
-                    parent.spawn(TextBundle {
-                        style: Style {
-                            align_self: AlignSelf::FlexEnd,
-                            ..Default::default()
-                        },
-                        text: Text {
-                            value: "Example text".to_string(),
-                            font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                            style: TextStyle {
-                                font_size: 30.0,
-                                color: Color::WHITE,
-                                ..Default::default()
-                            },
-                        },
-                        ..Default::default()
-                    });
-                });
+                },
+                ..Default::default()
+            });
         });
 }
 

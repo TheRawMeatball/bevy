@@ -23,13 +23,11 @@ fn infotext_system(commands: &mut Commands, asset_server: Res<AssetServer>) {
     let font = asset_server.load("fonts/FiraSans-Bold.ttf");
     commands.spawn(CameraUiBundle::default());
     commands.spawn(TextBundle {
-        style: Style {
-            align_self: AlignSelf::FlexEnd,
-            position_type: PositionType::Absolute,
-            position: Rect {
-                top: Val::Px(5.0),
-                left: Val::Px(15.0),
-                ..Default::default()
+        anchor_layout: AnchorLayout {
+            anchors: Anchors::TOP_LEFT,
+            constraint: Constraint::Independent {
+                x: AxisConstraint::FromContentSize(Alignment::DirectMargin(5.)),
+                y: AxisConstraint::FromContentSize(Alignment::ReverseMargin(15.)),
             },
             ..Default::default()
         },
@@ -45,17 +43,11 @@ fn infotext_system(commands: &mut Commands, asset_server: Res<AssetServer>) {
         ..Default::default()
     });
     commands.spawn(TextBundle {
-        style: Style {
-            align_self: AlignSelf::FlexEnd,
-            position_type: PositionType::Absolute,
-            position: Rect {
-                top: Val::Px(5.0),
-                right: Val::Px(15.0),
-                ..Default::default()
-            },
-            max_size: Size {
-                width: Val::Px(400.),
-                height: Val::Undefined,
+        anchor_layout: AnchorLayout {
+            anchors: Anchors::TOP_RIGHT,
+            constraint: Constraint::Independent {
+                x: AxisConstraint::ReverseMarginAndSize(15., 400.),
+                y: AxisConstraint::FromContentSize(Alignment::ReverseMargin(5.)),
             },
             ..Default::default()
         },
@@ -76,13 +68,11 @@ fn infotext_system(commands: &mut Commands, asset_server: Res<AssetServer>) {
     });
     commands
         .spawn(TextBundle {
-            style: Style {
-                align_self: AlignSelf::FlexEnd,
-                position_type: PositionType::Absolute,
-                position: Rect {
-                    bottom: Val::Px(5.0),
-                    right: Val::Px(15.0),
-                    ..Default::default()
+            anchor_layout: AnchorLayout {
+                anchors: Anchors::BOTTOM_RIGHT,
+                constraint: Constraint::Independent {
+                    x: AxisConstraint::FromContentSize(Alignment::ReverseMargin(15.)),
+                    y: AxisConstraint::FromContentSize(Alignment::DirectMargin(5.)),
                 },
                 ..Default::default()
             },
@@ -99,17 +89,11 @@ fn infotext_system(commands: &mut Commands, asset_server: Res<AssetServer>) {
         })
         .with(TextChanges);
     commands.spawn(TextBundle {
-        style: Style {
-            align_self: AlignSelf::FlexEnd,
-            position_type: PositionType::Absolute,
-            position: Rect {
-                bottom: Val::Px(5.0),
-                left: Val::Px(15.0),
-                ..Default::default()
-            },
-            size: Size {
-                width: Val::Px(200.0),
-                ..Default::default()
+        anchor_layout: AnchorLayout {
+            anchors: Anchors::BOTTOM_LEFT,
+            constraint: Constraint::Independent {
+                x: AxisConstraint::DirectMarginAndSize(15., 200.),
+                y: AxisConstraint::FromContentSize(Alignment::DirectMargin(5.)),
             },
             ..Default::default()
         },

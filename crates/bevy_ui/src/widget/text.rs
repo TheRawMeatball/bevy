@@ -1,7 +1,8 @@
-use crate::{Node, Style, Val};
+// use crate::{Node, Style, Val};
+use crate::{AnchorLayout, AxisConstraint, Constraint, Node};
 use bevy_asset::Assets;
-use bevy_ecs::{Changed, Entity, Local, Or, Query, QuerySet, Res, ResMut};
-use bevy_math::Size;
+use bevy_ecs::{Changed, Entity, Local, Or, Query, QuerySet, Res, ResMut, With};
+use bevy_math::{Size, Vec2};
 use bevy_render::{
     draw::{Draw, DrawContext, Drawable},
     mesh::Mesh,
@@ -13,7 +14,7 @@ use bevy_sprite::{TextureAtlas, QUAD_HANDLE};
 use bevy_text::{
     CalculatedSize, DefaultTextPipeline, DrawableText, Font, FontAtlasSet, Text, TextError,
 };
-use bevy_transform::prelude::GlobalTransform;
+use bevy_transform::{components::Parent, prelude::GlobalTransform};
 use bevy_window::Windows;
 
 #[derive(Debug, Default)]
@@ -27,14 +28,51 @@ fn scale_value(value: f32, factor: f64) -> f32 {
 
 /// Defines how min_size, size, and max_size affects the bounds of a text
 /// block.
-pub fn text_constraint(min_size: Val, size: Val, max_size: Val, scale_factor: f64) -> f32 {
+pub fn text_constraint(node: &AnchorLayout, space: Vec2, scale_factor: f64) -> Size<f32> {
     // Needs support for percentages
-    match (min_size, size, max_size) {
-        (_, _, Val::Px(max)) => scale_value(max, scale_factor),
-        (Val::Px(min), _, _) => scale_value(min, scale_factor),
-        (Val::Undefined, Val::Px(size), Val::Undefined) => scale_value(size, scale_factor),
-        (Val::Auto, Val::Px(size), Val::Auto) => scale_value(size, scale_factor),
-        _ => f32::MAX,
+    // match (min_size, size, max_size) {
+    //     (_, _, Val::Px(max)) => scale_value(max, scale_factor),
+    //     (Val::Px(min), _, _) => scale_value(min, scale_factor),
+    //     (Val::Undefined, Val::Px(size), Val::Undefined) => scale_value(size, scale_factor),
+    //     (Val::Auto, Val::Px(size), Val::Auto) => scale_value(size, scale_factor),
+    //     _ => f32::MAX,
+    // }
+
+    match &node.constraint {
+        Constraint::Independent { x, y } => Size::new(
+            solve_value(x, space.x, node.anchors.x()) * scale_factor as f32,
+            solve_value(y, space.y, node.anchors.y()) * scale_factor as f32,
+        ),
+        Constraint::SetXWithY { y, aspect, .. } => {
+            let y = solve_value(y, space.y, node.anchors.y());
+            let x = aspect.map(|a| y * a).unwrap_or(f32::MAX);
+            Size::new(x, y) * scale_factor as f32
+        }
+        Constraint::SetYWithX { x, aspect, .. } => {
+            let x = solve_value(x, space.x, node.anchors.x());
+            let y = aspect.map(|a| x / a).unwrap_or(f32::MAX);
+            Size::new(x, y) * scale_factor as f32
+        }
+        Constraint::MaxAspect(aspect) => {
+            let x_from_y = (node.anchors.y().1 - node.anchors.y().0) * space.y * aspect;
+            let y_from_x = (node.anchors.x().1 - node.anchors.x().0) * space.x / aspect;
+
+            if x_from_y >= space.x {
+                Size::new(space.x, y_from_x) * scale_factor as f32
+            } else {
+                Size::new(x_from_y, space.y) * scale_factor as f32
+            }
+        }
+    }
+}
+
+fn solve_value(constraint: &AxisConstraint, space: f32, anchors: (f32, f32)) -> f32 {
+    match &constraint {
+        AxisConstraint::DoubleMargin(p1, p2) => space * (anchors.1 - anchors.0) - p1 - p2,
+        AxisConstraint::DirectMarginAndSize(_, s) => *s,
+        AxisConstraint::ReverseMarginAndSize(_, s) => *s,
+        AxisConstraint::Centered(s) => *s,
+        AxisConstraint::FromContentSize(_) => f32::MAX,
     }
 }
 
@@ -49,15 +87,19 @@ pub fn text_system(
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     mut font_atlas_set_storage: ResMut<Assets<FontAtlasSet>>,
     mut text_pipeline: ResMut<DefaultTextPipeline>,
+    nodes: Query<&Node>,
     mut text_queries: QuerySet<(
-        Query<Entity, Or<(Changed<Text>, Changed<Style>)>>,
-        Query<(&Text, &Style, &mut CalculatedSize)>,
+        Query<Entity, Or<(With<Text>, Changed<AnchorLayout>, Changed<Node>)>>,
+        Query<(&Text, &AnchorLayout, &mut CalculatedSize)>,
     )>,
 ) {
-    let scale_factor = if let Some(window) = windows.get_primary() {
-        window.scale_factor()
+    let (scale_factor, window_size) = if let Some(window) = windows.get_primary() {
+        (
+            window.scale_factor(),
+            Vec2::new(window.width(), window.height()),
+        )
     } else {
-        1.
+        (1., Vec2::zero())
     };
 
     let inv_scale_factor = 1. / scale_factor;
@@ -75,20 +117,13 @@ pub fn text_system(
     let mut new_queue = Vec::new();
     let query = text_queries.q1_mut();
     for entity in queued_text.entities.drain(..) {
-        if let Ok((text, style, mut calculated_size)) = query.get_mut(entity) {
-            let node_size = Size::new(
-                text_constraint(
-                    style.min_size.width,
-                    style.size.width,
-                    style.max_size.width,
-                    scale_factor,
-                ),
-                text_constraint(
-                    style.min_size.height,
-                    style.size.height,
-                    style.max_size.height,
-                    scale_factor,
-                ),
+        if let Ok((text, layout, mut calculated_size)) = query.get_mut(entity) {
+            let parent = None;
+            let parent = parent.map(|parent: Parent| nodes.get(*parent).unwrap());
+            let node_size = text_constraint(
+                &layout,
+                parent.map(|p| p.size).unwrap_or(window_size),
+                scale_factor,
             );
 
             match text_pipeline.queue_text(
@@ -118,6 +153,7 @@ pub fn text_system(
                         width: scale_value(text_layout_info.size.width, inv_scale_factor),
                         height: scale_value(text_layout_info.size.height, inv_scale_factor),
                     };
+                    print!("");
                 }
             }
         }

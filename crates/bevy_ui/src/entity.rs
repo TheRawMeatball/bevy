@@ -2,7 +2,7 @@ use super::Node;
 use crate::{
     render::UI_PIPELINE_HANDLE,
     widget::{Button, Image},
-    FocusPolicy, Interaction, Style,
+    ANodeLayoutCache, AnchorLayout, FocusPolicy, Interaction,
 };
 use bevy_asset::Handle;
 use bevy_ecs::Bundle;
@@ -21,7 +21,8 @@ use bevy_transform::prelude::{GlobalTransform, Transform};
 #[derive(Bundle, Clone, Debug)]
 pub struct NodeBundle {
     pub node: Node,
-    pub style: Style,
+    pub anchor_layout: AnchorLayout,
+    pub __cache: ANodeLayoutCache,
     pub mesh: Handle<Mesh>, // TODO: maybe abstract this out
     pub material: Handle<ColorMaterial>,
     pub draw: Draw,
@@ -43,7 +44,8 @@ impl Default for NodeBundle {
                 ..Default::default()
             },
             node: Default::default(),
-            style: Default::default(),
+            anchor_layout: Default::default(),
+            __cache: Default::default(),
             material: Default::default(),
             draw: Default::default(),
             transform: Default::default(),
@@ -55,7 +57,8 @@ impl Default for NodeBundle {
 #[derive(Bundle, Clone, Debug)]
 pub struct ImageBundle {
     pub node: Node,
-    pub style: Style,
+    pub anchor_layout: AnchorLayout,
+    pub __cache: ANodeLayoutCache,
     pub image: Image,
     pub calculated_size: CalculatedSize,
     pub mesh: Handle<Mesh>, // TODO: maybe abstract this out
@@ -77,7 +80,8 @@ impl Default for ImageBundle {
             node: Default::default(),
             image: Default::default(),
             calculated_size: Default::default(),
-            style: Default::default(),
+            anchor_layout: Default::default(),
+            __cache: Default::default(),
             material: Default::default(),
             draw: Default::default(),
             visible: Visible {
@@ -93,7 +97,8 @@ impl Default for ImageBundle {
 #[derive(Bundle, Clone, Debug)]
 pub struct TextBundle {
     pub node: Node,
-    pub style: Style,
+    pub anchor_layout: AnchorLayout,
+    pub __cache: ANodeLayoutCache,
     pub draw: Draw,
     pub visible: Visible,
     pub text: Text,
@@ -117,7 +122,8 @@ impl Default for TextBundle {
             text: Default::default(),
             node: Default::default(),
             calculated_size: Default::default(),
-            style: Default::default(),
+            anchor_layout: Default::default(),
+            __cache: Default::default(),
             transform: Default::default(),
             global_transform: Default::default(),
         }
@@ -128,7 +134,8 @@ impl Default for TextBundle {
 pub struct ButtonBundle {
     pub node: Node,
     pub button: Button,
-    pub style: Style,
+    pub anchor_layout: AnchorLayout,
+    pub __cache: ANodeLayoutCache,
     pub interaction: Interaction,
     pub focus_policy: FocusPolicy,
     pub mesh: Handle<Mesh>, // TODO: maybe abstract this out
@@ -151,7 +158,8 @@ impl Default for ButtonBundle {
             interaction: Default::default(),
             focus_policy: Default::default(),
             node: Default::default(),
-            style: Default::default(),
+            anchor_layout: Default::default(),
+            __cache: Default::default(),
             material: Default::default(),
             draw: Default::default(),
             visible: Visible {
@@ -185,7 +193,7 @@ impl Default for CameraUiBundle {
             },
             orthographic_projection: OrthographicProjection {
                 far,
-                window_origin: WindowOrigin::BottomLeft,
+                window_origin: WindowOrigin::Center,
                 ..Default::default()
             },
             visible_entities: Default::default(),

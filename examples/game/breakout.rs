@@ -76,12 +76,11 @@ fn setup(
                     ..Default::default()
                 },
             },
-            style: Style {
-                position_type: PositionType::Absolute,
-                position: Rect {
-                    top: Val::Px(5.0),
-                    left: Val::Px(5.0),
-                    ..Default::default()
+            anchor_layout: AnchorLayout {
+                anchors: Anchors::TOP_LEFT,
+                constraint: Constraint::Independent {
+                    x: AxisConstraint::FromContentSize(Alignment::DirectMargin(5.)),
+                    y: AxisConstraint::FromContentSize(Alignment::ReverseMargin(5.)),
                 },
                 ..Default::default()
             },

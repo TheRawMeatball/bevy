@@ -46,12 +46,13 @@ fn atlas_render_system(
             state.atlas_count += 1;
             commands.spawn(ImageBundle {
                 material: materials.add(texture_atlas.texture.clone().into()),
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    position: Rect {
-                        top: Val::Px(0.0),
-                        left: Val::Px(512.0 * x_offset),
-                        ..Default::default()
+                anchor_layout: AnchorLayout {
+                    anchors: Anchors::TOP_LEFT,
+                    constraint: Constraint::Independent {
+                        x: AxisConstraint::FromContentSize(Alignment::DirectMargin(
+                            512. * x_offset,
+                        )),
+                        y: AxisConstraint::FromContentSize(Alignment::ReverseMargin(0.)),
                     },
                     ..Default::default()
                 },
@@ -86,6 +87,14 @@ fn setup(commands: &mut Commands, asset_server: Res<AssetServer>, mut state: Res
                 color: Color::WHITE,
                 ..Default::default()
             },
+        },
+        anchor_layout: AnchorLayout {
+            anchors: Anchors::BOTTOM_LEFT,
+            constraint: Constraint::Independent {
+                x: AxisConstraint::FromContentSize(Alignment::DirectMargin(0.)),
+                y: AxisConstraint::FromContentSize(Alignment::DirectMargin(0.)),
+            },
+            ..Default::default()
         },
         ..Default::default()
     });

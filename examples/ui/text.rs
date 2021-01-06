@@ -33,8 +33,12 @@ fn setup(commands: &mut Commands, asset_server: Res<AssetServer>) {
         .spawn(CameraUiBundle::default())
         // texture
         .spawn(TextBundle {
-            style: Style {
-                align_self: AlignSelf::FlexEnd,
+            anchor_layout: AnchorLayout {
+                anchors: Anchors::TOP_LEFT,
+                constraint: Constraint::Independent {
+                    x: AxisConstraint::FromContentSize(Alignment::DirectMargin(0.)),
+                    y: AxisConstraint::FromContentSize(Alignment::ReverseMargin(0.)),
+                },
                 ..Default::default()
             },
             text: Text {

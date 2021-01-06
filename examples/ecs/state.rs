@@ -37,14 +37,12 @@ fn setup_menu(
         // ui camera
         .spawn(CameraUiBundle::default())
         .spawn(ButtonBundle {
-            style: Style {
-                size: Size::new(Val::Px(150.0), Val::Px(65.0)),
-                // center button
-                margin: Rect::all(Val::Auto),
-                // horizontally center child text
-                justify_content: JustifyContent::Center,
-                // vertically center child text
-                align_items: AlignItems::Center,
+            anchor_layout: AnchorLayout {
+                anchors: Anchors::CENTER,
+                constraint: Constraint::Independent {
+                    x: AxisConstraint::Centered(150.),
+                    y: AxisConstraint::Centered(65.),
+                },
                 ..Default::default()
             },
             material: button_materials.normal.clone(),
@@ -60,6 +58,14 @@ fn setup_menu(
                         color: Color::rgb(0.9, 0.9, 0.9),
                         ..Default::default()
                     },
+                },
+                anchor_layout: AnchorLayout {
+                    anchors: Anchors::CENTER,
+                    constraint: Constraint::Independent {
+                        x: AxisConstraint::FromContentSize(Alignment::Offset(0.)),
+                        y: AxisConstraint::FromContentSize(Alignment::Offset(0.)),
+                    },
+                    ..Default::default()
                 },
                 ..Default::default()
             });

@@ -32,6 +32,14 @@ impl Anchors {
             top,
         }
     }
+
+    pub const fn x(&self) -> (f32, f32) {
+        (self.left, self.right)
+    }
+
+    pub const fn y(&self) -> (f32, f32) {
+        (self.bottom, self.top)
+    }
 }
 
 impl Default for Anchors {

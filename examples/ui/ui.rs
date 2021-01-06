@@ -18,9 +18,8 @@ fn setup(
         .spawn(CameraUiBundle::default())
         // root node
         .spawn(NodeBundle {
-            style: Style {
-                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                justify_content: JustifyContent::SpaceBetween,
+            anchor_layout: AnchorLayout {
+                anchors: Anchors::FULL,
                 ..Default::default()
             },
             material: materials.add(Color::NONE.into()),
@@ -30,9 +29,12 @@ fn setup(
             parent
                 // left vertical fill (border)
                 .spawn(NodeBundle {
-                    style: Style {
-                        size: Size::new(Val::Px(200.0), Val::Percent(100.0)),
-                        border: Rect::all(Val::Px(2.0)),
+                    anchor_layout: AnchorLayout {
+                        anchors: Anchors::LEFT_FULL,
+                        constraint: Constraint::Independent {
+                            x: AxisConstraint::DirectMarginAndSize(0., 200.),
+                            y: Default::default(),
+                        },
                         ..Default::default()
                     },
                     material: materials.add(Color::rgb(0.65, 0.65, 0.65).into()),
@@ -42,9 +44,12 @@ fn setup(
                     parent
                         // left vertical fill (content)
                         .spawn(NodeBundle {
-                            style: Style {
-                                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                                align_items: AlignItems::FlexEnd,
+                            anchor_layout: AnchorLayout {
+                                anchors: Anchors::FULL,
+                                constraint: Constraint::Independent {
+                                    x: AxisConstraint::DoubleMargin(2., 2.),
+                                    y: AxisConstraint::DoubleMargin(2., 2.),
+                                },
                                 ..Default::default()
                             },
                             material: materials.add(Color::rgb(0.15, 0.15, 0.15).into()),
@@ -53,8 +58,14 @@ fn setup(
                         .with_children(|parent| {
                             // text
                             parent.spawn(TextBundle {
-                                style: Style {
-                                    margin: Rect::all(Val::Px(5.0)),
+                                anchor_layout: AnchorLayout {
+                                    anchors: Anchors::FULL,
+                                    constraint: Constraint::Independent {
+                                        x: AxisConstraint::DoubleMargin(5., 5.),
+                                        y: AxisConstraint::FromContentSize(
+                                            Alignment::ReverseMargin(5.),
+                                        ),
+                                    },
                                     ..Default::default()
                                 },
                                 text: Text {
@@ -72,8 +83,12 @@ fn setup(
                 })
                 // right vertical fill
                 .spawn(NodeBundle {
-                    style: Style {
-                        size: Size::new(Val::Px(200.0), Val::Percent(100.0)),
+                    anchor_layout: AnchorLayout {
+                        anchors: Anchors::RIGHT_FULL,
+                        constraint: Constraint::Independent {
+                            x: AxisConstraint::ReverseMarginAndSize(0., 200.),
+                            y: AxisConstraint::DoubleMargin(0., 0.),
+                        },
                         ..Default::default()
                     },
                     material: materials.add(Color::rgb(0.15, 0.15, 0.15).into()),
@@ -81,15 +96,12 @@ fn setup(
                 })
                 // absolute positioning
                 .spawn(NodeBundle {
-                    style: Style {
-                        size: Size::new(Val::Px(200.0), Val::Px(200.0)),
-                        position_type: PositionType::Absolute,
-                        position: Rect {
-                            left: Val::Px(210.0),
-                            bottom: Val::Px(10.0),
-                            ..Default::default()
+                    anchor_layout: AnchorLayout {
+                        anchors: Anchors::BOTTOM_LEFT,
+                        constraint: Constraint::Independent {
+                            x: AxisConstraint::DirectMarginAndSize(210., 200.),
+                            y: AxisConstraint::DirectMarginAndSize(10., 200.),
                         },
-                        border: Rect::all(Val::Px(20.0)),
                         ..Default::default()
                     },
                     material: materials.add(Color::rgb(0.4, 0.4, 1.0).into()),
@@ -97,8 +109,12 @@ fn setup(
                 })
                 .with_children(|parent| {
                     parent.spawn(NodeBundle {
-                        style: Style {
-                            size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                        anchor_layout: AnchorLayout {
+                            anchors: Anchors::FULL,
+                            constraint: Constraint::Independent {
+                                x: AxisConstraint::DoubleMargin(20., 20.),
+                                y: AxisConstraint::DoubleMargin(20., 20.),
+                            },
                             ..Default::default()
                         },
                         material: materials.add(Color::rgb(0.8, 0.8, 1.0).into()),
@@ -107,110 +123,107 @@ fn setup(
                 })
                 // render order test: reddest in the back, whitest in the front (flex center)
                 .spawn(NodeBundle {
-                    style: Style {
-                        size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                        position_type: PositionType::Absolute,
-                        align_items: AlignItems::Center,
-                        justify_content: JustifyContent::Center,
+                    anchor_layout: AnchorLayout {
+                        anchors: Anchors::CENTER,
+                        constraint: Constraint::Independent {
+                            x: AxisConstraint::Centered(100.),
+                            y: AxisConstraint::Centered(100.),
+                        },
                         ..Default::default()
                     },
-                    material: materials.add(Color::NONE.into()),
+                    material: materials.add(Color::rgb(1.0, 0.0, 0.0).into()),
                     ..Default::default()
                 })
                 .with_children(|parent| {
                     parent
                         .spawn(NodeBundle {
-                            style: Style {
-                                size: Size::new(Val::Px(100.0), Val::Px(100.0)),
+                            anchor_layout: AnchorLayout {
+                                anchors: Anchors::BOTTOM_LEFT,
+                                constraint: Constraint::Independent {
+                                    x: AxisConstraint::DirectMarginAndSize(20., 100.),
+                                    y: AxisConstraint::DirectMarginAndSize(20., 100.),
+                                },
                                 ..Default::default()
                             },
-                            material: materials.add(Color::rgb(1.0, 0.0, 0.0).into()),
+                            material: materials.add(Color::rgb(1.0, 0.3, 0.3).into()),
                             ..Default::default()
                         })
-                        .with_children(|parent| {
-                            parent
-                                .spawn(NodeBundle {
-                                    style: Style {
-                                        size: Size::new(Val::Px(100.0), Val::Px(100.0)),
-                                        position_type: PositionType::Absolute,
-                                        position: Rect {
-                                            left: Val::Px(20.0),
-                                            bottom: Val::Px(20.0),
-                                            ..Default::default()
-                                        },
-                                        ..Default::default()
-                                    },
-                                    material: materials.add(Color::rgb(1.0, 0.3, 0.3).into()),
-                                    ..Default::default()
-                                })
-                                .spawn(NodeBundle {
-                                    style: Style {
-                                        size: Size::new(Val::Px(100.0), Val::Px(100.0)),
-                                        position_type: PositionType::Absolute,
-                                        position: Rect {
-                                            left: Val::Px(40.0),
-                                            bottom: Val::Px(40.0),
-                                            ..Default::default()
-                                        },
-                                        ..Default::default()
-                                    },
-                                    material: materials.add(Color::rgb(1.0, 0.5, 0.5).into()),
-                                    ..Default::default()
-                                })
-                                .spawn(NodeBundle {
-                                    style: Style {
-                                        size: Size::new(Val::Px(100.0), Val::Px(100.0)),
-                                        position_type: PositionType::Absolute,
-                                        position: Rect {
-                                            left: Val::Px(60.0),
-                                            bottom: Val::Px(60.0),
-                                            ..Default::default()
-                                        },
-                                        ..Default::default()
-                                    },
-                                    material: materials.add(Color::rgb(1.0, 0.7, 0.7).into()),
-                                    ..Default::default()
-                                })
-                                // alpha test
-                                .spawn(NodeBundle {
-                                    style: Style {
-                                        size: Size::new(Val::Px(100.0), Val::Px(100.0)),
-                                        position_type: PositionType::Absolute,
-                                        position: Rect {
-                                            left: Val::Px(80.0),
-                                            bottom: Val::Px(80.0),
-                                            ..Default::default()
-                                        },
-                                        ..Default::default()
-                                    },
-                                    material: materials.add(Color::rgba(1.0, 0.9, 0.9, 0.4).into()),
-                                    ..Default::default()
-                                });
+                        .spawn(NodeBundle {
+                            anchor_layout: AnchorLayout {
+                                anchors: Anchors::BOTTOM_LEFT,
+                                constraint: Constraint::Independent {
+                                    x: AxisConstraint::DirectMarginAndSize(40., 100.),
+                                    y: AxisConstraint::DirectMarginAndSize(40., 100.),
+                                },
+                                ..Default::default()
+                            },
+                            material: materials.add(Color::rgb(1.0, 0.5, 0.5).into()),
+                            ..Default::default()
+                        })
+                        .spawn(NodeBundle {
+                            anchor_layout: AnchorLayout {
+                                anchors: Anchors::BOTTOM_LEFT,
+                                constraint: Constraint::Independent {
+                                    x: AxisConstraint::DirectMarginAndSize(60., 100.),
+                                    y: AxisConstraint::DirectMarginAndSize(60., 100.),
+                                },
+                                ..Default::default()
+                            },
+                            material: materials.add(Color::rgb(1.0, 0.7, 0.7).into()),
+                            ..Default::default()
+                        })
+                        // alpha test
+                        .spawn(NodeBundle {
+                            anchor_layout: AnchorLayout {
+                                anchors: Anchors::BOTTOM_LEFT,
+                                constraint: Constraint::Independent {
+                                    x: AxisConstraint::DirectMarginAndSize(80., 100.),
+                                    y: AxisConstraint::DirectMarginAndSize(80., 100.),
+                                },
+                                ..Default::default()
+                            },
+                            material: materials.add(Color::rgba(1.0, 0.9, 0.9, 0.4).into()),
+                            ..Default::default()
                         });
                 })
-                // bevy logo (flex center)
-                .spawn(NodeBundle {
-                    style: Style {
-                        size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                        position_type: PositionType::Absolute,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::FlexEnd,
+                .spawn(ImageBundle {
+                    anchor_layout: AnchorLayout {
+                        anchors: Anchors::CENTER_TOP,
+                        constraint: Constraint::SetYWithX {
+                            x: AxisConstraint::Centered(500.),
+                            y: Alignment::ReverseMargin(0.),
+                            aspect: None,
+                        },
                         ..Default::default()
                     },
-                    material: materials.add(Color::NONE.into()),
+                    material: materials
+                        .add(asset_server.load("branding/bevy_logo_dark_big.png").into()),
                     ..Default::default()
-                })
-                .with_children(|parent| {
-                    // bevy logo (image)
-                    parent.spawn(ImageBundle {
-                        style: Style {
-                            size: Size::new(Val::Px(500.0), Val::Auto),
-                            ..Default::default()
-                        },
-                        material: materials
-                            .add(asset_server.load("branding/bevy_logo_dark_big.png").into()),
-                        ..Default::default()
-                    });
                 });
+
+            // // bevy logo (flex center)
+            // .spawn(NodeBundle {
+            //     style: Style {
+            //         size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+            //         position_type: PositionType::Absolute,
+            //         justify_content: JustifyContent::Center,
+            //         align_items: AlignItems::FlexEnd,
+            //         ..Default::default()
+            //     },
+            //     material: materials.add(Color::NONE.into()),
+            //     ..Default::default()
+            // })
+            // .with_children(|parent| {
+            //     // bevy logo (image)
+            //     parent.spawn(ImageBundle {
+            //         style: Style {
+            //             size: Size::new(Val::Px(500.0), Val::Auto),
+            //             ..Default::default()
+            //         },
+            //         material: materials
+            //             .add(asset_server.load("branding/bevy_logo_dark_big.png").into()),
+            //         ..Default::default()
+            //     });
+            // });
         });
 }

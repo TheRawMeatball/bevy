@@ -2,6 +2,7 @@ use crate::Node;
 use bevy_core::FloatOrd;
 use bevy_ecs::prelude::*;
 use bevy_input::{mouse::MouseButton, touch::Touches, Input};
+use bevy_math::Vec2;
 use bevy_transform::components::GlobalTransform;
 use bevy_window::Windows;
 
@@ -48,11 +49,11 @@ pub fn ui_focus_system(
         Option<&FocusPolicy>,
     )>,
 ) {
-    let cursor_position = if let Some(cursor_position) = windows
+    let cursor_position = if let Some((cursor_position, window)) = windows
         .get_primary()
-        .and_then(|window| window.cursor_position())
+        .and_then(|window| window.cursor_position().map(|p| (p, window)))
     {
-        cursor_position
+        cursor_position - Vec2::new(window.width() / 2., window.height() / 2.)
     } else {
         return;
     };
