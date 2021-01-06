@@ -42,6 +42,7 @@ impl Default for Constraint {
     }
 }
 
+// Maybe make this an enum and implement subset of flexbox / css grid?
 #[derive(Clone, Debug)]
 pub struct ChildConstraint {
     pub weight: f32,
@@ -86,6 +87,7 @@ pub enum AxisConstraint {
     DirectMarginAndSize(f32, f32),
     ReverseMarginAndSize(f32, f32),
     Centered(f32),
+    /// This is only valid for elements with `CalculatedSize`
     FromContentSize(Alignment),
 }
 

@@ -46,9 +46,9 @@ impl Default for Anchors {
     fn default() -> Self {
         Anchors {
             left: 0.0,
-            right: 0.0,
+            right: 1.0,
             bottom: 0.0,
-            top: 0.0,
+            top: 1.0,
         }
     }
 }

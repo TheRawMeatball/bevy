@@ -13,6 +13,7 @@ fn setup(
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    let transparent = materials.add(Color::NONE.into());
     commands
         // ui camera
         .spawn(CameraUiBundle::default())
@@ -22,7 +23,7 @@ fn setup(
                 anchors: Anchors::FULL,
                 ..Default::default()
             },
-            material: materials.add(Color::NONE.into()),
+            material: transparent.clone(),
             ..Default::default()
         })
         .with_children(|parent| {
@@ -93,6 +94,65 @@ fn setup(
                     },
                     material: materials.add(Color::rgb(0.15, 0.15, 0.15).into()),
                     ..Default::default()
+                })
+                .with_children(|parent| {
+                    // Dynamic layout
+                    parent
+                        .spawn(NodeBundle {
+                            anchor_layout: AnchorLayout {
+                                anchors: Anchors::FULL,
+                                constraint: Constraint::Independent {
+                                    x: AxisConstraint::DoubleMargin(10., 10.),
+                                    y: AxisConstraint::DoubleMargin(10., 10.),
+                                },
+                                children_spread: Some(SpreadConstraint {
+                                    direction: Direction::Down,
+                                    margin: 10.,
+                                    ..Default::default()
+                                }),
+                                ..Default::default()
+                            },
+                            material: transparent.clone(),
+                            ..Default::default()
+                        })
+                        .with_children(|parent| {
+                            parent
+                                .spawn(NodeBundle {
+                                    material: materials.add(Color::CYAN.into()),
+                                    anchor_layout: AnchorLayout {
+                                        child_constraint: Some(ChildConstraint {
+                                            weight: 1.,
+                                            max_size: 300.,
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    ..Default::default()
+                                })
+                                .spawn(NodeBundle {
+                                    material: materials.add(Color::GREEN.into()),
+                                    anchor_layout: AnchorLayout {
+                                        child_constraint: Some(ChildConstraint {
+                                            weight: 1.,
+                                            min_size: 200.,
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    ..Default::default()
+                                })
+                                .spawn(NodeBundle {
+                                    material: materials.add(Color::TEAL.into()),
+                                    anchor_layout: AnchorLayout {
+                                        child_constraint: Some(ChildConstraint {
+                                            weight: 2.,
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    ..Default::default()
+                                });
+                        });
                 })
                 // absolute positioning
                 .spawn(NodeBundle {

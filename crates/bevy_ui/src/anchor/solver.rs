@@ -186,7 +186,7 @@ pub(crate) fn solve(
                 while k != undef.len() {
                     let (i, (n, e)) = undef[k];
                     let len = length_per_weight * n.weight;
-                    if (n.min_size..n.max_size).contains(&len) {
+                    if !(n.min_size..n.max_size).contains(&len) {
                         dirty = true;
                         undef_weight_sum -= n.weight;
                         let clamped = len.clamp(n.min_size, n.max_size);
