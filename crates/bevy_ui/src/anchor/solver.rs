@@ -1,150 +1,157 @@
 use std::collections::BTreeMap;
 
+use bevy_core::FloatOrd;
 use bevy_ecs::{Entity, Flags, Query};
-use bevy_math::Vec2;
+use bevy_math::{Rect, Vec2, Vec3};
 use bevy_text::CalculatedSize;
 use bevy_transform::components::{Children, Transform};
 
-use crate::Node;
+use crate::{MinSize, Node};
 
 use super::*;
 
 pub(crate) fn solve(
     solve_entity: Entity,
-    space: Vec2,
+    parent_size: Vec2,
+    parent_padding: Rect<f32>,
     respect_flags: bool,
     nodes: &Query<(
         &AnchorLayout,
         Flags<AnchorLayout>,
+        &MinSize,
+        Flags<MinSize>,
         Option<&CalculatedSize>,
         Option<&Children>,
         Option<Flags<Children>>,
     )>,
     mutables: &mut Query<(&mut Transform, &mut Node, &mut ANodeLayoutCache), With<AnchorLayout>>,
 ) {
-    let (mut target_transform, mut render_data, cache) = mutables.get_mut(solve_entity).unwrap();
-    let target_size = &mut render_data.size;
-    let (solve_target, node_flags, c_size, children, children_flags) =
+    let (mut target_transform, mut node, cache) = mutables.get_mut(solve_entity).unwrap();
+    let target_size = &mut node.size;
+    let (solve_layout, layout_flags, min_size, min_size_flags, c_size, children, children_flags) =
         nodes.get(solve_entity).unwrap();
 
-    if respect_flags && !node_flags.changed() && !c_size.map(|f| f.dirty).unwrap_or(false) {
+    let min_size = min_size.size;
+
+    // <caching>
+    if respect_flags
+        && !layout_flags.changed()
+        && !min_size_flags.changed()
+        && !c_size.map(|f| f.dirty).unwrap_or(false)
+    {
         if let Some(children) = children {
-            let solve_self =
-                |transforms| solve(solve_entity, space, false, nodes, transforms);
+            let solve_self = |transforms| {
+                solve(
+                    solve_entity,
+                    parent_size,
+                    parent_padding,
+                    false,
+                    nodes,
+                    transforms,
+                )
+            };
             let ts = *target_size;
-            if solve_target.children_spread.is_some() {
+            if solve_layout.children_spread.is_some() {
                 if children_flags.unwrap().changed() {
                     solve_self(mutables);
                     return;
                 }
                 for child in children.iter() {
-                    let child = nodes.get(*child).unwrap();
-                    if child.1.changed() || child.2.map(|cs| cs.dirty).unwrap_or(false) {
+                    let (_, layout_flags, _, min_size, c_size, ..) = nodes.get(*child).unwrap();
+                    if layout_flags.changed()
+                        || min_size.changed()
+                        || c_size.map(|cs| cs.dirty).unwrap_or(false)
+                    {
                         solve_self(mutables);
                         return;
                     }
                 }
-                let cache = cache.sizes.as_ref().unwrap().clone();
+                let cache = cache.children_sizes.as_ref().unwrap().clone();
                 for (child, size) in children.iter().zip(cache.iter()) {
-                    solve(*child, *size, true, nodes, mutables)
+                    solve(*child, *size, solve_layout.padding, true, nodes, mutables)
                 }
             } else {
                 for child in children.iter() {
-                    solve(*child, ts, true, nodes, mutables)
+                    solve(*child, ts, solve_layout.padding, true, nodes, mutables)
                 }
             }
         }
         return;
     }
+    // </caching>
 
-    let csize = (c_size.map(|c| c.size.width), c_size.map(|c| c.size.height));
-    let mut offset = match &solve_target.constraint {
+    let parent_size = parent_size
+        - Vec2::new(
+            parent_padding.left + parent_padding.right,
+            parent_padding.top + parent_padding.bottom,
+        );
+
+    let mut offset = match &solve_layout.constraint {
         Constraint::Independent { x, y } => {
-            let x = x.solve(solve_target.anchors.x(), space.x, csize.0);
-            let y = y.solve(solve_target.anchors.y(), space.y, csize.1);
+            let x = x.solve(solve_layout.anchors.x(), parent_size.x, min_size.x);
+            let y = y.solve(solve_layout.anchors.y(), parent_size.y, min_size.y);
 
             *target_size = Vec2::new(x.size, y.size);
             Vec2::new(x.offset, y.offset)
         }
         Constraint::SetXWithY { x, y, aspect } => {
-            let y = y.solve(solve_target.anchors.y(), space.y, csize.1);
+            let y = y.solve(solve_layout.anchors.y(), parent_size.y, min_size.y);
             let aspect = aspect.unwrap_or_else(|| {
                 c_size
                     .map(|cs| cs.size.width / cs.size.height)
                     .unwrap_or(1.)
             });
-            let x = match x {
-                Alignment::DirectMargin(m) => AxisConstraint::DirectMarginAndSize(
-                    *m,
-                    y.size * aspect,
-                )
-                .solve(solve_target.anchors.x(), space.x, None),
-                Alignment::ReverseMargin(m) => AxisConstraint::ReverseMarginAndSize(
-                    *m,
-                    y.size / aspect,
-                )
-                .solve(solve_target.anchors.x(), space.x, None),
-                Alignment::Offset(o) => AxisConstraintSolve {
-                    offset: *o,
-                    size: y.size / aspect,
-                },
-            };
+            let x = x.solve(aspect, y.size, parent_size.x, solve_layout.anchors.x());
 
             *target_size = Vec2::new(x.size, y.size);
             Vec2::new(x.offset, y.offset)
         }
         Constraint::SetYWithX { x, y, aspect } => {
-            let x = x.solve(solve_target.anchors.x(), space.x, csize.0);
+            let x = x.solve(solve_layout.anchors.x(), parent_size.x, min_size.x);
             let aspect = aspect.unwrap_or_else(|| {
                 c_size
                     .map(|cs| cs.size.width / cs.size.height)
                     .unwrap_or(1.)
             });
-            let y = match y {
-                Alignment::DirectMargin(m) => AxisConstraint::DirectMarginAndSize(
-                    *m,
-                    x.size / aspect,
-                )
-                .solve(solve_target.anchors.y(), space.y, None),
-                Alignment::ReverseMargin(m) => AxisConstraint::ReverseMarginAndSize(
-                    *m,
-                    x.size / aspect,
-                )
-                .solve(solve_target.anchors.y(), space.y, None),
-                Alignment::Offset(o) => AxisConstraintSolve {
-                    offset: *o,
-                    size: x.size / aspect,
-                },
-            };
+            let y = y.solve(1. / aspect, x.size, parent_size.y, solve_layout.anchors.y());
 
             *target_size = Vec2::new(x.size, y.size);
             Vec2::new(x.offset, y.offset)
         }
         Constraint::MaxAspect(aspect) => {
+            let aspect = aspect.unwrap_or_else(|| {
+                c_size
+                    .map(|cs| cs.size.width / cs.size.height)
+                    .unwrap_or(1.)
+            });
             let x_from_y =
-                (solve_target.anchors.y().1 - solve_target.anchors.y().0) * space.y * aspect;
+                (solve_layout.anchors.y().1 - solve_layout.anchors.y().0) * parent_size.y * aspect;
             let y_from_x =
-                (solve_target.anchors.x().1 - solve_target.anchors.x().0) * space.x / aspect;
+                (solve_layout.anchors.x().1 - solve_layout.anchors.x().0) * parent_size.x / aspect;
 
-            *target_size = if x_from_y >= space.x {
-                Vec2::new(space.x, y_from_x)
+            *target_size = if x_from_y >= parent_size.x {
+                Vec2::new(parent_size.x, y_from_x)
             } else {
-                Vec2::new(x_from_y, space.y)
+                Vec2::new(x_from_y, parent_size.y)
             };
             Vec2::zero()
         }
     };
 
-    if solve_target.child_constraint.is_some() {
+    if solve_layout.child_constraint.is_some() {
         offset += target_transform.translation.truncate();
     };
 
-    target_transform.translation = offset.extend(0.);
+    offset += Vec2::new(
+        parent_padding.bottom - parent_padding.top,
+        parent_padding.left - parent_padding.right,
+    ) / 2.;
 
+    target_transform.translation = offset.extend(0.);
 
     if let Some(children) = children {
         let ts = *target_size;
-        if let Some(spread_constraint) = &solve_target.children_spread {
+        if let Some(spread_constraint) = &solve_layout.children_spread {
             let child_nodes = children.iter().map(|c| {
                 (
                     nodes
@@ -153,13 +160,24 @@ pub(crate) fn solve(
                         .child_constraint
                         .as_ref()
                         .unwrap(),
+                    {
+                        let size = nodes.get_component::<MinSize>(*c).unwrap().size;
+                        match spread_constraint.direction {
+                            Direction::Left | Direction::Right => size.x,
+                            Direction::Up | Direction::Down => size.y,
+                        }
+                    },
                     c,
                 )
             });
 
             let mut free_length = match spread_constraint.direction {
-                Direction::Left | Direction::Right => ts.x,
-                Direction::Up | Direction::Down => ts.y,
+                Direction::Left | Direction::Right => {
+                    ts.x - solve_layout.padding.left - solve_layout.padding.right
+                }
+                Direction::Up | Direction::Down => {
+                    ts.y - solve_layout.padding.top - solve_layout.padding.bottom
+                }
             } - (children.iter().count() - 1) as f32
                 * spread_constraint.margin;
 
@@ -170,35 +188,50 @@ pub(crate) fn solve(
 
             for (i, c) in child_nodes.enumerate() {
                 undef_weight_sum += c.0.weight;
-                undef.push((i, c));
+                undef.push((
+                    i,
+                    c.0.weight,
+                    c.0.min_size.unwrap_or_else(|| c.1),
+                    c.0.max_size.unwrap_or_else(|| c.1),
+                    c.2,
+                ));
             }
 
             loop {
-                let mut dirty = false;
+                let mut dirty = BTreeMap::new();
                 let length_per_weight = free_length / undef_weight_sum;
+                let mut delta = 0.;
 
                 let mut k = 0;
                 while k != undef.len() {
-                    let (i, (n, e)) = undef[k];
-                    let len = length_per_weight * n.weight;
-                    if !(n.min_size..n.max_size).contains(&len) {
-                        dirty = true;
-                        undef_weight_sum -= n.weight;
-                        let clamped = len.clamp(n.min_size, n.max_size);
-                        free_length -= clamped;
-                        locked.insert(i, (e, clamped));
-                        undef.swap_remove(k);
+                    let (_, weight, min, max, _) = undef[k];
+                    let len = length_per_weight * weight;
+                    if !(min..max).contains(&len) {
+                        let clamped = len.clamp(min, max);
+                        delta += clamped - len;
+                        dirty.insert(FloatOrd(clamped - len), (undef.swap_remove(k), clamped));
                     } else {
                         k += 1;
                     }
                 }
 
-                if !dirty {
-                    for (i, (n, e)) in undef.iter() {
-                        let len = length_per_weight * n.weight;
+                if dirty.len() == 0 {
+                    for (i, w, .., e) in undef.iter() {
+                        let len = length_per_weight * w;
                         locked.insert(*i, (e, len));
                     }
                     break;
+                } else {
+                    let key = if delta > 0. {
+                        *dirty.keys().next_back().unwrap()
+                    } else {
+                        *dirty.keys().next().unwrap()
+                    };
+                    let ((i, w, .., e), c) = dirty.remove(&key).unwrap();
+                    locked.insert(i, (e, c));
+                    free_length -= c;
+                    undef_weight_sum -= w;
+                    undef.extend(dirty.into_iter().map(|(_, (v, _))| v));
                 }
             }
 
@@ -222,21 +255,35 @@ pub(crate) fn solve(
                     ),
                 };
 
-            let mut offset = 0.;
+            let mut offset = match spread_constraint.direction {
+                Direction::Up => solve_layout.padding.top,
+                Direction::Down => solve_layout.padding.bottom,
+                Direction::Left => solve_layout.padding.left,
+                Direction::Right => solve_layout.padding.right,
+            };
             let mut cache = vec![];
+
+            let padding_offset = Vec3::new(
+                solve_layout.padding.bottom - solve_layout.padding.top,
+                solve_layout.padding.left - solve_layout.padding.right,
+                0.,
+            ) / 2.;
+
             for &(&entity, size) in locked.values() {
-                let (mut transform, _, _) = mutables.get_mut(entity).unwrap();
-                transform.translation = calc_pos(size, offset, ts).extend(0.);
+                let mut transform = mutables.get_component_mut::<Transform>(entity).unwrap();
+                transform.translation = calc_pos(size, offset, ts).extend(0.) + padding_offset;
                 offset += size + spread_constraint.margin;
                 let size = calc_size(size, ts);
                 cache.push(size);
-                solve(entity, size, respect_flags, nodes, mutables);
+                solve(entity, size, Rect::all(0.), respect_flags, nodes, mutables);
             }
-            let (_, _, mut target_cache) = mutables.get_mut(solve_entity).unwrap();
-            target_cache.sizes = Some(cache);
+            let mut target_cache = mutables
+                .get_component_mut::<ANodeLayoutCache>(solve_entity)
+                .unwrap();
+            target_cache.children_sizes = Some(cache);
         } else {
             for child in children.iter() {
-                solve(*child, ts, false, nodes, mutables);
+                solve(*child, ts, solve_layout.padding, false, nodes, mutables);
             }
         }
     }
@@ -247,7 +294,8 @@ impl AxisConstraint {
         self,
         anchors: (f32, f32),
         true_space: f32,
-        content_size: Option<f32>,
+        // Only used if `self` is `FromContentSize`
+        content_size: f32,
     ) -> AxisConstraintSolve {
         let space = (anchors.1 - anchors.0) * true_space;
 
@@ -256,26 +304,26 @@ impl AxisConstraint {
             AxisConstraint::DirectMarginAndSize(p1, s) => (p1, s),
             AxisConstraint::ReverseMarginAndSize(p2, s) => (space - p2 - s, s),
             AxisConstraint::Centered(s) => ((space - s) / 2., s),
-            AxisConstraint::FromContentSize(alignment) => {
-                let size = content_size.unwrap();
-
-                match alignment {
-                    Alignment::DirectMargin(v) => (v, size),
-                    Alignment::ReverseMargin(v) => {
-                        return AxisConstraintSolve {
-                            offset: true_space * (anchors.1 - 0.5) - v - size / 2.,
-                            size,
-                        }
-                    }
-                    Alignment::Offset(offset) => {
-                        let int = AxisConstraint::Centered(size).solve(anchors, true_space, None);
-                        return AxisConstraintSolve {
-                            offset: int.offset + offset,
-                            size,
-                        };
+            AxisConstraint::FromContentSize(alignment) => match alignment {
+                Alignment::DirectMargin(v) => (v, content_size),
+                Alignment::ReverseMargin(v) => {
+                    return AxisConstraintSolve {
+                        offset: true_space * (anchors.1 - 0.5) - v - content_size / 2.,
+                        size: content_size,
                     }
                 }
-            }
+                Alignment::Offset(offset) => {
+                    let int = AxisConstraint::Centered(content_size).solve(
+                        anchors,
+                        true_space,
+                        content_size,
+                    );
+                    return AxisConstraintSolve {
+                        offset: int.offset + offset,
+                        size: content_size,
+                    };
+                }
+            },
         };
         let offset = true_space * (anchors.0 - 0.5) + p1 + s / 2.;
         AxisConstraintSolve { offset, size: s }
@@ -285,4 +333,29 @@ impl AxisConstraint {
 struct AxisConstraintSolve {
     offset: f32,
     size: f32,
+}
+
+impl Alignment {
+    fn solve(
+        &self,
+        aspect: f32,
+        opposite_size: f32,
+        space: f32,
+        anchors: (f32, f32),
+    ) -> AxisConstraintSolve {
+        match self {
+            Alignment::DirectMargin(m) => {
+                AxisConstraint::DirectMarginAndSize(*m, opposite_size * aspect)
+                    .solve(anchors, space, 0.)
+            }
+            Alignment::ReverseMargin(m) => {
+                AxisConstraint::ReverseMarginAndSize(*m, opposite_size * aspect)
+                    .solve(anchors, space, 0.)
+            }
+            Alignment::Offset(o) => AxisConstraintSolve {
+                offset: *o,
+                size: opposite_size * aspect,
+            },
+        }
+    }
 }

@@ -1,5 +1,5 @@
 // use crate::{Node, Style, Val};
-use crate::{AnchorLayout, AxisConstraint, Constraint, Node};
+use crate::{AnchorLayout, Aspect, AxisConstraint, Constraint, Node};
 use bevy_asset::Assets;
 use bevy_ecs::{Entity, Flags, Query, Res, ResMut};
 use bevy_math::{Size, Vec2};
@@ -45,22 +45,26 @@ pub fn text_constraint(node: &AnchorLayout, space: Vec2, scale_factor: f64) -> S
         ),
         Constraint::SetXWithY { y, aspect, .. } => {
             let y = solve_value(y, space.y, node.anchors.y());
-            let x = aspect.map(|a| y * a).unwrap_or(f32::MAX);
+            let x = aspect.map_value(|a| y * a).unwrap_or_else(|| f32::MAX);
             Size::new(x, y) * scale_factor as f32
         }
         Constraint::SetYWithX { x, aspect, .. } => {
             let x = solve_value(x, space.x, node.anchors.x());
-            let y = aspect.map(|a| x / a).unwrap_or(f32::MAX);
+            let y = aspect.map_value(|a| x / a).unwrap_or_else(|| f32::MAX);
             Size::new(x, y) * scale_factor as f32
         }
         Constraint::MaxAspect(aspect) => {
-            let x_from_y = (node.anchors.y().1 - node.anchors.y().0) * space.y * aspect;
-            let y_from_x = (node.anchors.x().1 - node.anchors.x().0) * space.x / aspect;
-
-            if x_from_y >= space.x {
-                Size::new(space.x, y_from_x) * scale_factor as f32
+            if let Aspect::Value(aspect) = aspect {
+                let x_from_y = (node.anchors.y().1 - node.anchors.y().0) * space.y * aspect;
+                let y_from_x = (node.anchors.x().1 - node.anchors.x().0) * space.x / aspect;
+    
+                if x_from_y >= space.x {
+                    Size::new(space.x, y_from_x) * scale_factor as f32
+                } else {
+                    Size::new(x_from_y, space.y) * scale_factor as f32
+                }
             } else {
-                Size::new(x_from_y, space.y) * scale_factor as f32
+                Size::new(f32::MAX, f32::MAX)
             }
         }
     }

@@ -9,6 +9,12 @@ pub struct Size<T: Reflect = f32> {
     pub height: T,
 }
 
+impl Into<Vec2> for Size<f32> {
+    fn into(self) -> Vec2 {
+        Vec2::new(self.width, self.height)
+    }
+}
+
 impl<T: Reflect> Size<T> {
     pub fn new(width: T, height: T) -> Self {
         Size { width, height }

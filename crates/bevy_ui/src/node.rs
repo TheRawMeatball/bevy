@@ -7,3 +7,9 @@ use bevy_render::renderer::RenderResources;
 pub struct Node {
     pub size: Vec2,
 }
+
+#[derive(Debug, Clone, Default, Reflect)]
+pub struct MinSize {
+    /// Used internally, DO NOT set manually
+    pub(crate) size: Vec2
+}

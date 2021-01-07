@@ -39,7 +39,13 @@ impl Plugin for UiPlugin {
             SystemStage::parallel(),
         )
         // TODO: Change to dependency of text_system once system dependencies land
-        .add_stage_before(stage::UI, "layout", SystemStage::single(anchor_node_system.system()))
+        .add_stage_before(
+            stage::UI,
+            "layout",
+            SystemStage::serial()
+                .with_system(solve_min_system.system())
+                .with_system(anchor_node_system.system()),
+        )
         .add_system_to_stage(bevy_app::stage::PRE_UPDATE, ui_focus_system.system())
         // add these stages to front because these must run before transform update systems
         .add_system_to_stage(stage::UI, widget::text_system.system())

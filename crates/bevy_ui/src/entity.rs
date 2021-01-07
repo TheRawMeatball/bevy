@@ -1,9 +1,5 @@
 use super::Node;
-use crate::{
-    render::UI_PIPELINE_HANDLE,
-    widget::{Button, Image},
-    ANodeLayoutCache, AnchorLayout, FocusPolicy, Interaction,
-};
+use crate::{ANodeLayoutCache, AnchorLayout, FocusPolicy, Interaction, MinSize, render::UI_PIPELINE_HANDLE, widget::{Button, Image}};
 use bevy_asset::Handle;
 use bevy_ecs::Bundle;
 use bevy_math::Vec3;
@@ -21,6 +17,7 @@ use bevy_transform::prelude::{GlobalTransform, Transform};
 #[derive(Bundle, Clone, Debug)]
 pub struct NodeBundle {
     pub node: Node,
+    pub min_size: MinSize,
     pub anchor_layout: AnchorLayout,
     pub __cache: ANodeLayoutCache,
     pub mesh: Handle<Mesh>, // TODO: maybe abstract this out
@@ -43,6 +40,7 @@ impl Default for NodeBundle {
                 is_transparent: true,
                 ..Default::default()
             },
+            min_size: Default::default(),
             node: Default::default(),
             anchor_layout: Default::default(),
             __cache: Default::default(),
@@ -57,6 +55,7 @@ impl Default for NodeBundle {
 #[derive(Bundle, Clone, Debug)]
 pub struct ImageBundle {
     pub node: Node,
+    pub min_size: MinSize,
     pub anchor_layout: AnchorLayout,
     pub __cache: ANodeLayoutCache,
     pub image: Image,
@@ -78,6 +77,7 @@ impl Default for ImageBundle {
                 UI_PIPELINE_HANDLE.typed(),
             )]),
             node: Default::default(),
+            min_size: Default::default(),
             image: Default::default(),
             calculated_size: Default::default(),
             anchor_layout: Default::default(),
@@ -97,6 +97,7 @@ impl Default for ImageBundle {
 #[derive(Bundle, Clone, Debug)]
 pub struct TextBundle {
     pub node: Node,
+    pub min_size: MinSize,
     pub anchor_layout: AnchorLayout,
     pub __cache: ANodeLayoutCache,
     pub draw: Draw,
@@ -121,6 +122,7 @@ impl Default for TextBundle {
             },
             text: Default::default(),
             node: Default::default(),
+            min_size: Default::default(),
             calculated_size: Default::default(),
             anchor_layout: Default::default(),
             __cache: Default::default(),
@@ -133,6 +135,7 @@ impl Default for TextBundle {
 #[derive(Bundle, Clone, Debug)]
 pub struct ButtonBundle {
     pub node: Node,
+    pub min_size: MinSize,
     pub button: Button,
     pub anchor_layout: AnchorLayout,
     pub __cache: ANodeLayoutCache,
@@ -158,6 +161,7 @@ impl Default for ButtonBundle {
             interaction: Default::default(),
             focus_policy: Default::default(),
             node: Default::default(),
+            min_size: Default::default(),
             anchor_layout: Default::default(),
             __cache: Default::default(),
             material: Default::default(),
