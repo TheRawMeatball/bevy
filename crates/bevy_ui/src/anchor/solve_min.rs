@@ -3,7 +3,9 @@ use bevy_math::Vec2;
 use bevy_text::CalculatedSize;
 use bevy_transform::components::Children;
 
-use crate::{Alignment, AnchorLayout, Aspect, AxisConstraint, Constraint, ConstraintSize, Direction, MinSize};
+use crate::{
+    Alignment, AnchorLayout, Aspect, AxisConstraint, Constraint, ConstraintSize, Direction, MinSize,
+};
 
 pub fn solve(
     node: Entity,
@@ -69,7 +71,11 @@ pub fn solve(
     internal_size.x += layout.padding.left + layout.padding.right;
     internal_size.y += layout.padding.top + layout.padding.bottom;
 
-    mutable.get_mut(node).unwrap().size = internal_size;
+    let mut min_size = mutable.get_mut(node).unwrap();
+    // Directly changing value avoided to avoid tripping the mutated flag
+    if min_size.size != internal_size {
+        min_size.size = internal_size;
+    }
 
     match &layout.constraint {
         Constraint::Independent { x, y } => {

@@ -171,13 +171,15 @@ pub(crate) fn solve(
                 )
             });
 
+            let ts = ts
+                - Vec2::new(
+                    solve_layout.padding.left + solve_layout.padding.right,
+                    solve_layout.padding.bottom + solve_layout.padding.top,
+                );
+
             let mut free_length = match spread_constraint.direction {
-                Direction::Left | Direction::Right => {
-                    ts.x - solve_layout.padding.left - solve_layout.padding.right
-                }
-                Direction::Up | Direction::Down => {
-                    ts.y - solve_layout.padding.top - solve_layout.padding.bottom
-                }
+                Direction::Left | Direction::Right => ts.x,
+                Direction::Up | Direction::Down => ts.y,
             } - (children.iter().count() - 1) as f32
                 * spread_constraint.margin;
 
@@ -258,12 +260,7 @@ pub(crate) fn solve(
                     ),
                 };
 
-            let mut offset = match spread_constraint.direction {
-                Direction::Up => solve_layout.padding.top,
-                Direction::Down => solve_layout.padding.bottom,
-                Direction::Left => solve_layout.padding.left,
-                Direction::Right => solve_layout.padding.right,
-            };
+            let mut offset = 0.;
             let mut cache = vec![];
 
             let padding_offset = Vec3::new(

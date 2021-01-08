@@ -148,11 +148,16 @@ pub fn text_system(
                     let text_layout_info = text_pipeline.get_glyphs(&entity).expect(
                         "Failed to get glyphs from the pipeline that have just been computed",
                     );
-                    calculated_size.size = Size {
+                    let size = Size {
                         width: scale_value(text_layout_info.size.width, inv_scale_factor),
                         height: scale_value(text_layout_info.size.height, inv_scale_factor),
                     };
-                    calculated_size.dirty = true;
+                    if size != calculated_size.size {
+                        calculated_size.dirty = true;
+                        calculated_size.size = size;
+                    } else {
+                        calculated_size.dirty = false;
+                    }
                     print!("");
                 }
             }
