@@ -198,7 +198,7 @@ pub(crate) fn solve(
             }
 
             loop {
-                let mut dirty = BTreeMap::new();
+                let mut dirty = BTreeMap::<_, Vec<_>>::new();
                 let length_per_weight = free_length / undef_weight_sum;
                 let mut delta = 0.;
 
@@ -209,7 +209,8 @@ pub(crate) fn solve(
                     if !(min..max).contains(&len) {
                         let clamped = len.clamp(min, max);
                         delta += clamped - len;
-                        dirty.insert(FloatOrd(clamped - len), (undef.swap_remove(k), clamped));
+                        let entry = dirty.entry(FloatOrd(clamped - len));
+                        entry.or_default().push((undef.swap_remove(k), clamped));
                     } else {
                         k += 1;
                     }
@@ -227,11 +228,13 @@ pub(crate) fn solve(
                     } else {
                         *dirty.keys().next().unwrap()
                     };
-                    let ((i, w, .., e), c) = dirty.remove(&key).unwrap();
+                    let ((i, w, .., e), c) = dirty.entry(key).or_default().pop().unwrap();
                     locked.insert(i, (e, c));
                     free_length -= c;
                     undef_weight_sum -= w;
-                    undef.extend(dirty.into_iter().map(|(_, (v, _))| v));
+                    for (v, _) in dirty.into_iter().map(|v| v.1).flatten() {
+                        undef.push(v);
+                    }
                 }
             }
 

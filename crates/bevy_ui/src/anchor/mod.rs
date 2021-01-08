@@ -40,10 +40,6 @@ pub(crate) fn anchor_node_system(
             }
         }
     }
-    println!(" ------------------------ ");
-    for (t, n, ..) in transforms.iter_mut() {
-        println!("{:?} {:?}", t.translation, n.size);
-    }
 }
 
 pub(crate) fn solve_min_system(
