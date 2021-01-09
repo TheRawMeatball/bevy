@@ -127,7 +127,6 @@ fn setup(
                                     material: materials.add(Color::CYAN.into()),
                                     anchor_layout: AnchorLayout {
                                         child_constraint: Some(ChildConstraint {
-                                            weight: 1.,
                                             max_size: ConstraintSize::Pixels(80.),
                                             min_size: ConstraintSize::FromContent,
                                             ..Default::default()

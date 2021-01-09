@@ -16,7 +16,7 @@ pub fn solve(
 
     let inherent_size = calculated_size
         .map(|cs| cs.size.into())
-        .unwrap_or(Vec2::zero());
+        .unwrap_or_else(Vec2::zero);
 
     let mut internal_size: Vec2 = if let Some(children) = children {
         if let Some(sc) = &layout.children_spread {

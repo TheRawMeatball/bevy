@@ -204,24 +204,26 @@ pub(crate) fn solve(
                 let length_per_weight = free_length / undef_weight_sum;
                 let mut delta = 0.;
 
-                let mut k = 0;
-                while k != undef.len() {
-                    let (_, weight, min, max, _) = undef[k];
-                    let len = length_per_weight * weight;
-                    if !(min..max).contains(&len) {
-                        let clamped = len.clamp(min, max);
-                        delta += clamped - len;
-                        let entry = dirty.entry(FloatOrd(clamped - len));
-                        entry.or_default().push((undef.swap_remove(k), clamped));
-                    } else {
-                        k += 1;
+                {
+                    let mut i = 0;
+                    while i != undef.len() {
+                        let (_, weight, min, max, _) = undef[i];
+                        let len = length_per_weight * weight;
+                        if !(min..max).contains(&len) {
+                            let clamped = len.clamp(min, max);
+                            delta += clamped - len;
+                            let entry = dirty.entry(FloatOrd(clamped - len));
+                            entry.or_default().push((undef.swap_remove(i), clamped));
+                        } else {
+                            i += 1;
+                        }
                     }
                 }
 
-                if dirty.len() == 0 {
-                    for (i, w, .., e) in undef.iter() {
-                        let len = length_per_weight * w;
-                        locked.insert(*i, (e, len));
+                if dirty.is_empty() {
+                    for (i, weight, .., entity) in undef.iter() {
+                        let len = length_per_weight * weight;
+                        locked.insert(*i, (entity, len));
                     }
                     break;
                 } else {
@@ -230,10 +232,10 @@ pub(crate) fn solve(
                     } else {
                         *dirty.keys().next().unwrap()
                     };
-                    let ((i, w, .., e), c) = dirty.entry(key).or_default().pop().unwrap();
-                    locked.insert(i, (e, c));
-                    free_length -= c;
-                    undef_weight_sum -= w;
+                    let ((i, weight, .., entity), clamped) = dirty.entry(key).or_default().pop().unwrap();
+                    locked.insert(i, (entity, clamped));
+                    free_length -= clamped;
+                    undef_weight_sum -= weight;
                     for (v, _) in dirty.into_iter().map(|v| v.1).flatten() {
                         undef.push(v);
                     }
