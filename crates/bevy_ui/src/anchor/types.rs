@@ -11,7 +11,7 @@ pub struct AnchorLayout {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct ANodeLayoutCache {
+pub struct LayoutCache {
     /// Used by SpreadConstraint to cache children sizes
     pub(crate) children_sizes: Option<Vec<Vec2>>,
 }

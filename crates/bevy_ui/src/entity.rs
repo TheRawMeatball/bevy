@@ -2,7 +2,7 @@ use super::Node;
 use crate::{
     render::UI_PIPELINE_HANDLE,
     widget::{Button, Image},
-    ANodeLayoutCache, AnchorLayout, FocusPolicy, Interaction, MinSize,
+    LayoutCache, AnchorLayout, FocusPolicy, Interaction, MinSize,
 };
 use bevy_asset::Handle;
 use bevy_ecs::Bundle;
@@ -23,7 +23,7 @@ pub struct NodeBundle {
     pub node: Node,
     pub min_size: MinSize,
     pub anchor_layout: AnchorLayout,
-    pub __cache: ANodeLayoutCache,
+    pub cache: LayoutCache,
     pub mesh: Handle<Mesh>, // TODO: maybe abstract this out
     pub material: Handle<ColorMaterial>,
     pub draw: Draw,
@@ -47,7 +47,7 @@ impl Default for NodeBundle {
             min_size: Default::default(),
             node: Default::default(),
             anchor_layout: Default::default(),
-            __cache: Default::default(),
+            cache: Default::default(),
             material: Default::default(),
             draw: Default::default(),
             transform: Default::default(),
@@ -61,7 +61,7 @@ pub struct ImageBundle {
     pub node: Node,
     pub min_size: MinSize,
     pub anchor_layout: AnchorLayout,
-    pub __cache: ANodeLayoutCache,
+    pub __cache: LayoutCache,
     pub image: Image,
     pub calculated_size: CalculatedSize,
     pub mesh: Handle<Mesh>, // TODO: maybe abstract this out
@@ -103,7 +103,7 @@ pub struct TextBundle {
     pub node: Node,
     pub min_size: MinSize,
     pub anchor_layout: AnchorLayout,
-    pub __cache: ANodeLayoutCache,
+    pub __cache: LayoutCache,
     pub draw: Draw,
     pub visible: Visible,
     pub text: Text,
@@ -142,7 +142,7 @@ pub struct ButtonBundle {
     pub min_size: MinSize,
     pub button: Button,
     pub anchor_layout: AnchorLayout,
-    pub __cache: ANodeLayoutCache,
+    pub __cache: LayoutCache,
     pub interaction: Interaction,
     pub focus_policy: FocusPolicy,
     pub mesh: Handle<Mesh>, // TODO: maybe abstract this out

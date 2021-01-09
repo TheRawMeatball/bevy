@@ -22,7 +22,7 @@ pub(crate) fn anchor_node_system(
         Option<&Children>,
         Option<Flags<Children>>,
     )>,
-    mut transforms: Query<(&mut Transform, &mut Node, &mut ANodeLayoutCache), With<AnchorLayout>>,
+    mut transforms: Query<(&mut Transform, &mut Node, &mut LayoutCache), With<AnchorLayout>>,
     windows: Res<Windows>,
     mut local: Local<Vec2>,
 ) {

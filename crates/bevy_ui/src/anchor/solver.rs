@@ -24,7 +24,7 @@ pub(crate) fn solve(
         Option<&Children>,
         Option<Flags<Children>>,
     )>,
-    mutables: &mut Query<(&mut Transform, &mut Node, &mut ANodeLayoutCache), With<AnchorLayout>>,
+    mutables: &mut Query<(&mut Transform, &mut Node, &mut LayoutCache), With<AnchorLayout>>,
 ) {
     let (mut target_transform, mut node, cache) = mutables.get_mut(solve_entity).unwrap();
     let target_size = &mut node.size;
@@ -280,7 +280,7 @@ pub(crate) fn solve(
                 solve(entity, size, Rect::all(0.), false, nodes, mutables);
             }
             let mut target_cache = mutables
-                .get_component_mut::<ANodeLayoutCache>(solve_entity)
+                .get_component_mut::<LayoutCache>(solve_entity)
                 .unwrap();
             target_cache.children_sizes = Some(cache);
         } else {
