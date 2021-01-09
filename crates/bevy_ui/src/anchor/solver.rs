@@ -275,7 +275,7 @@ pub(crate) fn solve(
                 offset += size + spread_constraint.margin;
                 let size = calc_size(size, ts);
                 cache.push(size);
-                solve(entity, size, Rect::all(0.), respect_flags, nodes, mutables);
+                solve(entity, size, Rect::all(0.), false, nodes, mutables);
             }
             let mut target_cache = mutables
                 .get_component_mut::<ANodeLayoutCache>(solve_entity)

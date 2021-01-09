@@ -57,7 +57,7 @@ pub fn text_constraint(node: &AnchorLayout, space: Vec2, scale_factor: f64) -> S
             if let Aspect::Value(aspect) = aspect {
                 let x_from_y = (node.anchors.y().1 - node.anchors.y().0) * space.y * aspect;
                 let y_from_x = (node.anchors.x().1 - node.anchors.x().0) * space.x / aspect;
-    
+
                 if x_from_y >= space.x {
                     Size::new(space.x, y_from_x) * scale_factor as f32
                 } else {

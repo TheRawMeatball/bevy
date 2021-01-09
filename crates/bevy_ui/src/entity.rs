@@ -1,5 +1,9 @@
 use super::Node;
-use crate::{ANodeLayoutCache, AnchorLayout, FocusPolicy, Interaction, MinSize, render::UI_PIPELINE_HANDLE, widget::{Button, Image}};
+use crate::{
+    render::UI_PIPELINE_HANDLE,
+    widget::{Button, Image},
+    ANodeLayoutCache, AnchorLayout, FocusPolicy, Interaction, MinSize,
+};
 use bevy_asset::Handle;
 use bevy_ecs::Bundle;
 use bevy_math::Vec3;

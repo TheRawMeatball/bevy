@@ -32,11 +32,25 @@ pub(crate) fn anchor_node_system(
         if window_size != *local {
             *local = window_size;
             for root in roots.iter() {
-                solver::solve(root, window_size, Rect::all(0.), false, &nodes, &mut transforms);
+                solver::solve(
+                    root,
+                    window_size,
+                    Rect::all(0.),
+                    false,
+                    &nodes,
+                    &mut transforms,
+                );
             }
         } else {
             for root in roots.iter() {
-                solver::solve(root, window_size, Rect::all(0.), true, &nodes, &mut transforms);
+                solver::solve(
+                    root,
+                    window_size,
+                    Rect::all(0.),
+                    true,
+                    &nodes,
+                    &mut transforms,
+                );
             }
         }
     }

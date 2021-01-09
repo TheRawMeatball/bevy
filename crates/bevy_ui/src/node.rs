@@ -11,5 +11,5 @@ pub struct Node {
 #[derive(Debug, Clone, Default, Reflect)]
 pub struct MinSize {
     /// Used internally, DO NOT set manually
-    pub(crate) size: Vec2
+    pub(crate) size: Vec2,
 }
