@@ -22,7 +22,7 @@ pub struct SystemState {
 }
 
 pub trait Applyable: Send + Sync + downcast_rs::Downcast {
-    fn apply(self: Box<Self>, world: &mut World, resources: &mut Resources) -> Box<dyn Applyable>;
+    fn apply(self: &mut Self, world: &mut World, resources: &mut Resources);
 }
 
 downcast_rs::impl_downcast!(Applyable);
@@ -135,11 +135,11 @@ impl<Out: 'static> System for FuncSystem<Out> {
     }
 
     fn run_exclusive(&mut self, world: &mut World, resources: &mut Resources) {
-        let pairs = self.state.apply_buffers.drain().collect::<Vec<_>>();
-        for (k, v) in pairs.into_iter() {
-            let v = v.into_inner().apply(world, resources);
-
-            self.state.apply_buffers.insert(k, UnsafeCell::new(v));
+        for applyable in self.state.apply_buffers.values_mut() {
+            // SAFE: this is called with unique access to SystemState
+            unsafe {
+                (&mut *applyable.get()).apply(world, resources);
+            }
         }
     }
 
@@ -194,11 +194,11 @@ impl<In: 'static, Out: 'static> System for InputFuncSystem<In, Out> {
     }
 
     fn run_exclusive(&mut self, world: &mut World, resources: &mut Resources) {
-        let pairs = self.state.apply_buffers.drain().collect::<Vec<_>>();
-        for (k, v) in pairs.into_iter() {
-            let v = v.into_inner().apply(world, resources);
-
-            self.state.apply_buffers.insert(k, UnsafeCell::new(v));
+        for applyable in self.state.apply_buffers.values_mut() {
+            // SAFE: this is called with unique access to SystemState
+            unsafe {
+                (&mut *applyable.get()).apply(world, resources);
+            }
         }
     }
 

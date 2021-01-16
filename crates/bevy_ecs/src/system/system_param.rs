@@ -102,10 +102,14 @@ impl<'a> FetchSystemParam<'a> for FetchCommands {
         let commands = system_state
             .apply_buffers
             .entry(TypeId::of::<Commands>())
-            .or_insert(std::cell::UnsafeCell::new(Box::<Commands>::default()))
-            .get_mut();
-        let commands = commands.downcast_mut::<Commands>().unwrap();
-        commands.set_entity_reserver(world.get_entity_reserver())
+            .or_insert(std::cell::UnsafeCell::new(Box::<Commands>::default()));
+        // SAFE: this is called with unique access to SystemState
+        unsafe {
+            (&mut *commands.get())
+                .downcast_mut::<Commands>()
+                .unwrap()
+                .set_entity_reserver(world.get_entity_reserver());
+        }
     }
 
     #[inline]
