@@ -99,10 +99,13 @@ impl<'a> FetchSystemParam<'a> for FetchCommands {
     type Item = &'a mut Commands;
 
     fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
-        // SAFE: this is called with unique access to SystemState
-        unsafe {
-            (&mut *system_state.commands.get()).set_entity_reserver(world.get_entity_reserver())
-        }
+        let commands = system_state
+            .apply_buffers
+            .entry(TypeId::of::<Commands>())
+            .or_insert(std::cell::UnsafeCell::new(Box::<Commands>::default()))
+            .get_mut();
+        let commands = commands.downcast_mut::<Commands>().unwrap();
+        commands.set_entity_reserver(world.get_entity_reserver())
     }
 
     #[inline]
@@ -111,35 +114,41 @@ impl<'a> FetchSystemParam<'a> for FetchCommands {
         _world: &'a World,
         _resources: &'a Resources,
     ) -> Option<Self::Item> {
-        Some(&mut *system_state.commands.get())
+        let commands = system_state
+            .apply_buffers
+            .get(&TypeId::of::<Commands>())
+            .unwrap();
+        let mut commands = (*commands.get()).downcast_mut::<Commands>().unwrap();
+        let commands: &'a mut Commands = std::mem::transmute(&mut commands);
+        Some(commands)
     }
 }
 
-pub struct FetchArcCommands;
-impl SystemParam for Arc<Mutex<Commands>> {
-    type Fetch = FetchArcCommands;
-}
+// pub struct FetchArcCommands;
+// impl SystemParam for Arc<Mutex<Commands>> {
+//     type Fetch = FetchArcCommands;
+// }
 
-impl<'a> FetchSystemParam<'a> for FetchArcCommands {
-    type Item = Arc<Mutex<Commands>>;
+// impl<'a> FetchSystemParam<'a> for FetchArcCommands {
+//     type Item = Arc<Mutex<Commands>>;
 
-    fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
-        system_state.arc_commands.get_or_insert_with(|| {
-            let mut commands = Commands::default();
-            commands.set_entity_reserver(world.get_entity_reserver());
-            Arc::new(Mutex::new(commands))
-        });
-    }
+//     fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
+//         system_state.arc_commands.get_or_insert_with(|| {
+//             let mut commands = Commands::default();
+//             commands.set_entity_reserver(world.get_entity_reserver());
+//             Arc::new(Mutex::new(commands))
+//         });
+//     }
 
-    #[inline]
-    unsafe fn get_param(
-        system_state: &SystemState,
-        _world: &World,
-        _resources: &Resources,
-    ) -> Option<Self::Item> {
-        Some(system_state.arc_commands.as_ref().unwrap().clone())
-    }
-}
+//     #[inline]
+//     unsafe fn get_param(
+//         system_state: &SystemState,
+//         _world: &World,
+//         _resources: &Resources,
+//     ) -> Option<Self::Item> {
+//         Some(system_state.arc_commands.as_ref().unwrap().clone())
+//     }
+// }
 
 pub struct FetchRes<T>(PhantomData<T>);
 

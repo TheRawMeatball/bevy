@@ -3,6 +3,7 @@ use crate::{
     AccessConflict, ArchetypeComponent, Commands, QueryAccess, Resources, System, SystemId,
     SystemParam, TypeAccess, World,
 };
+use bevy_utils::HashMap;
 use parking_lot::Mutex;
 use std::{any::TypeId, borrow::Cow, cell::UnsafeCell, sync::Arc};
 
@@ -16,10 +17,15 @@ pub struct SystemState {
     pub(crate) query_archetype_component_accesses: Vec<TypeAccess<ArchetypeComponent>>,
     pub(crate) query_accesses: Vec<Vec<QueryAccess>>,
     pub(crate) query_type_names: Vec<&'static str>,
-    pub(crate) commands: UnsafeCell<Commands>,
-    pub(crate) arc_commands: Option<Arc<Mutex<Commands>>>,
+    pub(crate) apply_buffers: HashMap<TypeId, UnsafeCell<Box<dyn Applyable>>>,
     pub(crate) current_query_index: UnsafeCell<usize>,
 }
+
+pub trait Applyable: Send + Sync + downcast_rs::Downcast {
+    fn apply(self: Box<Self>, world: &mut World, resources: &mut Resources) -> Box<dyn Applyable>;
+}
+
+downcast_rs::impl_downcast!(Applyable);
 
 // SAFE: UnsafeCell<Commands> and UnsafeCell<usize> only accessed from the thread they are scheduled on
 unsafe impl Sync for SystemState {}
@@ -129,13 +135,11 @@ impl<Out: 'static> System for FuncSystem<Out> {
     }
 
     fn run_exclusive(&mut self, world: &mut World, resources: &mut Resources) {
-        // SAFE: this is called with unique access to SystemState
-        unsafe {
-            (&mut *self.state.commands.get()).apply(world, resources);
-        }
-        if let Some(ref commands) = self.state.arc_commands {
-            let mut commands = commands.lock();
-            commands.apply(world, resources);
+        let pairs = self.state.apply_buffers.drain().collect::<Vec<_>>();
+        for (k, v) in pairs.into_iter() {
+            let v = v.into_inner().apply(world, resources);
+
+            self.state.apply_buffers.insert(k, UnsafeCell::new(v));
         }
     }
 
@@ -190,13 +194,11 @@ impl<In: 'static, Out: 'static> System for InputFuncSystem<In, Out> {
     }
 
     fn run_exclusive(&mut self, world: &mut World, resources: &mut Resources) {
-        // SAFE: this is called with unique access to SystemState
-        unsafe {
-            (&mut *self.state.commands.get()).apply(world, resources);
-        }
-        if let Some(ref commands) = self.state.arc_commands {
-            let mut commands = commands.lock();
-            commands.apply(world, resources);
+        let pairs = self.state.apply_buffers.drain().collect::<Vec<_>>();
+        for (k, v) in pairs.into_iter() {
+            let v = v.into_inner().apply(world, resources);
+
+            self.state.apply_buffers.insert(k, UnsafeCell::new(v));
         }
     }
 
@@ -238,8 +240,7 @@ macro_rules! impl_into_system {
                         is_thread_local: false,
                         local_resource_access: TypeAccess::default(),
                         id: SystemId::new(),
-                        commands: Default::default(),
-                        arc_commands: Default::default(),
+                        apply_buffers: Default::default(),
                         current_query_index: Default::default(),
                         query_archetype_component_accesses: Vec::new(),
                         query_accesses: Vec::new(),
@@ -281,8 +282,7 @@ macro_rules! impl_into_system {
                         is_thread_local: false,
                         local_resource_access: TypeAccess::default(),
                         id: SystemId::new(),
-                        commands: Default::default(),
-                        arc_commands: Default::default(),
+                        apply_buffers: Default::default(),
                         current_query_index: Default::default(),
                         query_archetype_component_accesses: Vec::new(),
                         query_accesses: Vec::new(),
