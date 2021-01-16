@@ -105,7 +105,7 @@ impl<'a> FetchSystemParam<'a> for FetchCommands {
             .or_insert(std::cell::UnsafeCell::new(Box::<Commands>::default()))
             .get_mut();
         let commands = commands.downcast_mut::<Commands>().unwrap();
-        commands.set_entity_reserver(world.get_entity_reserver())
+        commands.set_entity_reserver(world.get_entity_reserver());
     }
 
     #[inline]
@@ -124,31 +124,42 @@ impl<'a> FetchSystemParam<'a> for FetchCommands {
     }
 }
 
-// pub struct FetchArcCommands;
-// impl SystemParam for Arc<Mutex<Commands>> {
-//     type Fetch = FetchArcCommands;
-// }
+pub struct FetchArcCommands;
+impl SystemParam for Arc<Mutex<Commands>> {
+    type Fetch = FetchArcCommands;
+}
 
-// impl<'a> FetchSystemParam<'a> for FetchArcCommands {
-//     type Item = Arc<Mutex<Commands>>;
+impl<'a> FetchSystemParam<'a> for FetchArcCommands {
+    type Item = Arc<Mutex<Commands>>;
 
-//     fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
-//         system_state.arc_commands.get_or_insert_with(|| {
-//             let mut commands = Commands::default();
-//             commands.set_entity_reserver(world.get_entity_reserver());
-//             Arc::new(Mutex::new(commands))
-//         });
-//     }
+    fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
+        system_state
+            .apply_buffers
+            .entry(TypeId::of::<Arc<Mutex<Commands>>>())
+            .or_insert(std::cell::UnsafeCell::new(Box::new({
+                let mut commands = Commands::default();
+                commands.set_entity_reserver(world.get_entity_reserver());
+                Arc::new(Mutex::new(commands))
+            })));
+    }
 
-//     #[inline]
-//     unsafe fn get_param(
-//         system_state: &SystemState,
-//         _world: &World,
-//         _resources: &Resources,
-//     ) -> Option<Self::Item> {
-//         Some(system_state.arc_commands.as_ref().unwrap().clone())
-//     }
-// }
+    #[inline]
+    unsafe fn get_param(
+        system_state: &SystemState,
+        _world: &World,
+        _resources: &Resources,
+    ) -> Option<Self::Item> {
+        let commands = system_state
+            .apply_buffers
+            .get(&TypeId::of::<Arc<Mutex<Commands>>>())
+            .unwrap()
+            .clone();
+        let commands = (&mut *commands.get())
+            .downcast_mut::<Arc<Mutex<Commands>>>()
+            .unwrap();
+        Some(commands.clone())
+    }
+}
 
 pub struct FetchRes<T>(PhantomData<T>);
 

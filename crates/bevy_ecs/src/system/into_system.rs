@@ -1,7 +1,7 @@
 use super::system_param::FetchSystemParam;
 use crate::{
-    AccessConflict, ArchetypeComponent, Commands, QueryAccess, Resources, System, SystemId,
-    SystemParam, TypeAccess, World,
+    AccessConflict, ArchetypeComponent, QueryAccess, Resources, System, SystemId, SystemParam,
+    TypeAccess, World,
 };
 use bevy_utils::HashMap;
 use parking_lot::Mutex;
@@ -22,7 +22,13 @@ pub struct SystemState {
 }
 
 pub trait Applyable: Send + Sync + downcast_rs::Downcast {
-    fn apply(&mut self, world: &mut World, resources: &mut Resources) ;
+    fn apply(&mut self, world: &mut World, resources: &mut Resources);
+}
+
+impl<T: Applyable> Applyable for Arc<Mutex<T>> {
+    fn apply(&mut self, world: &mut World, resources: &mut Resources) {
+        self.lock().apply(world, resources);
+    }
 }
 
 downcast_rs::impl_downcast!(Applyable);
