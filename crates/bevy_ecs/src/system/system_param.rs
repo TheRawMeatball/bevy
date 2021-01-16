@@ -1,7 +1,7 @@
 use crate::{
-    ArchetypeComponent, ChangedRes, Commands, Fetch, FromResources, Local, Or, Query, QueryAccess,
-    QueryFilter, QuerySet, QueryTuple, Res, ResMut, Resource, ResourceIndex, Resources,
-    SystemState, ThreadLocal, TypeAccess, World, WorldQuery,
+    ArchetypeComponent, ChangedRes, Command, Commands, Fetch, FromResources, Local, Or, Query,
+    QueryAccess, QueryFilter, QuerySet, QueryTuple, Res, ResMut, Resource, ResourceIndex,
+    Resources, SystemState, ThreadLocal, TypeAccess, World, WorldQuery,
 };
 use parking_lot::Mutex;
 use std::{any::TypeId, sync::Arc};
@@ -92,9 +92,12 @@ impl<T: QueryTuple, Input> SystemParam<Input> for QuerySet<T> {
 
 impl<'a, Input> SystemParam<Input> for &'a mut Commands {
     fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
-        system_state
-            .commands
-            .set_entity_reserver(world.get_entity_reserver())
+        let commands = system_state
+            .apply_buffers
+            .entry(TypeId::of::<Commands>())
+            .or_insert(Box::<Commands>::default());
+        let commands = commands.downcast_mut::<Commands>().unwrap();
+        commands.set_entity_reserver(world.get_entity_reserver())
     }
 
     #[inline]
@@ -104,30 +107,35 @@ impl<'a, Input> SystemParam<Input> for &'a mut Commands {
         _world: &World,
         _resources: &Resources,
     ) -> Option<Self> {
-        let commands: &'a mut Commands = std::mem::transmute(&mut system_state.commands);
+        let commands = system_state
+            .apply_buffers
+            .get_mut(&TypeId::of::<Commands>())
+            .unwrap();
+        let mut commands = commands.downcast_mut::<Commands>().unwrap();
+        let commands: &'a mut Commands = std::mem::transmute(&mut commands);
         Some(commands)
     }
 }
 
-impl<Input> SystemParam<Input> for Arc<Mutex<Commands>> {
-    fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
-        system_state.arc_commands.get_or_insert_with(|| {
-            let mut commands = Commands::default();
-            commands.set_entity_reserver(world.get_entity_reserver());
-            Arc::new(Mutex::new(commands))
-        });
-    }
+// impl<Input> SystemParam<Input> for Arc<Mutex<Commands>> {
+//     fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
+//         system_state.arc_commands.get_or_insert_with(|| {
+//             let mut commands = Commands::default();
+//             commands.set_entity_reserver(world.get_entity_reserver());
+//             Arc::new(Mutex::new(commands))
+//         });
+//     }
 
-    #[inline]
-    unsafe fn get_param(
-        _input: &mut Option<Input>,
-        system_state: &mut SystemState,
-        _world: &World,
-        _resources: &Resources,
-    ) -> Option<Self> {
-        Some(system_state.arc_commands.as_ref().unwrap().clone())
-    }
-}
+//     #[inline]
+//     unsafe fn get_param(
+//         _input: &mut Option<Input>,
+//         system_state: &mut SystemState,
+//         _world: &World,
+//         _resources: &Resources,
+//     ) -> Option<Self> {
+//         Some(system_state.arc_commands.as_ref().unwrap().clone())
+//     }
+// }
 
 impl<'a, T: Resource, Input> SystemParam<Input> for Res<'a, T> {
     fn init(system_state: &mut SystemState, _world: &World, _resources: &mut Resources) {

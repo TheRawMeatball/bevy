@@ -2,6 +2,7 @@ use crate::{
     AccessConflict, ArchetypeComponent, Commands, QueryAccess, Resources, System, SystemId,
     SystemParam, TypeAccess, World,
 };
+use bevy_utils::HashMap;
 use parking_lot::Mutex;
 use std::{any::TypeId, borrow::Cow, sync::Arc};
 
@@ -15,10 +16,15 @@ pub struct SystemState {
     pub(crate) query_archetype_component_accesses: Vec<TypeAccess<ArchetypeComponent>>,
     pub(crate) query_accesses: Vec<Vec<QueryAccess>>,
     pub(crate) query_type_names: Vec<&'static str>,
-    pub(crate) commands: Commands,
-    pub(crate) arc_commands: Option<Arc<Mutex<Commands>>>,
+    pub(crate) apply_buffers: HashMap<TypeId, Box<dyn Applyable>>,
     pub(crate) current_query_index: usize,
 }
+
+pub trait Applyable: Send + Sync + downcast_rs::Downcast {
+    fn apply(self: Box<Self>, world: &mut World, resources: &mut Resources) -> Box<dyn Applyable>;
+}
+
+downcast_rs::impl_downcast!(Applyable);
 
 impl SystemState {
     pub fn reset_indices(&mut self) {
@@ -123,10 +129,11 @@ impl<In: 'static, Out: 'static> System for FuncSystem<In, Out> {
     }
 
     fn run_exclusive(&mut self, world: &mut World, resources: &mut Resources) {
-        self.state.commands.apply(world, resources);
-        if let Some(ref commands) = self.state.arc_commands {
-            let mut commands = commands.lock();
-            commands.apply(world, resources);
+        let pairs = self.state.apply_buffers.drain().collect::<Vec<_>>();
+        for (k, v) in pairs.into_iter() {
+            let v = v.apply(world, resources);
+
+            self.state.apply_buffers.insert(k, v);
         }
     }
 
@@ -163,8 +170,7 @@ macro_rules! impl_into_system {
                         is_thread_local: false,
                         local_resource_access: TypeAccess::default(),
                         id: SystemId::new(),
-                        commands: Commands::default(),
-                        arc_commands: Default::default(),
+                        apply_buffers: Default::default(),
                         query_archetype_component_accesses: Vec::new(),
                         query_accesses: Vec::new(),
                         query_type_names: Vec::new(),
