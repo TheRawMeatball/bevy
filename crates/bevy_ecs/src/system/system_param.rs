@@ -118,8 +118,8 @@ impl<'a> FetchSystemParam<'a> for FetchCommands {
             .apply_buffers
             .get(&TypeId::of::<Commands>())
             .unwrap();
-        let mut commands = (*commands.get()).downcast_mut::<Commands>().unwrap();
-        let commands: &'a mut Commands = std::mem::transmute(&mut commands);
+        let commands = (&mut *commands.get()).downcast_mut::<Commands>().unwrap();
+        let commands: &'a mut Commands = std::mem::transmute(commands);
         Some(commands)
     }
 }
