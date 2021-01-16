@@ -190,7 +190,7 @@ pub struct Commands {
 }
 
 impl Applyable for Commands {
-    fn apply(self: &mut Self, world: &mut World, resources: &mut Resources) {
+    fn apply(&mut self, world: &mut World, resources: &mut Resources) {
         Commands::apply(self, world, resources);
     }
 }

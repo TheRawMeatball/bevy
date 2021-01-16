@@ -22,7 +22,7 @@ pub struct SystemState {
 }
 
 pub trait Applyable: Send + Sync + downcast_rs::Downcast {
-    fn apply(self: &mut Self, world: &mut World, resources: &mut Resources);
+    fn apply(&mut self, world: &mut World, resources: &mut Resources);
 }
 
 downcast_rs::impl_downcast!(Applyable);
