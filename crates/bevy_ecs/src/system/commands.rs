@@ -191,12 +191,11 @@ pub struct Commands {
 
 impl Applyable for Commands {
     fn apply(
-        mut self: Box<Self>,
+        &mut self,
         world: &mut World,
         resources: &mut Resources,
-    ) -> Box<dyn Applyable> {
-        Commands::apply(&mut self, world, resources);
-        self as Box<dyn Applyable>
+    ) {
+        Commands::apply(self, world, resources);
     }
 }
 
