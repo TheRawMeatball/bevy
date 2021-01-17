@@ -1,8 +1,4 @@
-use crate::{
-    ArchetypeComponent, ChangedRes, Commands, Fetch, FromResources, Local, Or, Query, QueryAccess,
-    QueryFilter, QuerySet, QueryTuple, Res, ResMut, Resource, ResourceIndex, Resources,
-    SystemState, ThreadLocal, TypeAccess, World, WorldQuery,
-};
+use crate::{Applyable, ArchetypeComponent, ChangedRes, Fetch, FromResources, Local, Or, Query, QueryAccess, QueryFilter, QuerySet, QueryTuple, Res, ResMut, Resource, ResourceIndex, Resources, SystemState, ThreadLocal, TypeAccess, World, WorldQuery};
 use parking_lot::Mutex;
 use std::{any::TypeId, marker::PhantomData, sync::Arc};
 pub trait SystemParam: Sized {
@@ -90,22 +86,22 @@ impl<'a, T: QueryTuple> FetchSystemParam<'a> for FetchQuerySet<T> {
     }
 }
 
-pub struct FetchCommands;
+pub struct FetchApplyable<T>(PhantomData<T>);
 
-impl<'a> SystemParam for &'a mut Commands {
-    type Fetch = FetchCommands;
+impl<'a, T: Applyable + Default> SystemParam for &'a mut T {
+    type Fetch = FetchApplyable<T>;
 }
-impl<'a> FetchSystemParam<'a> for FetchCommands {
-    type Item = &'a mut Commands;
+impl<'a, T: Applyable + Default> FetchSystemParam<'a> for FetchApplyable<T> {
+    type Item = &'a mut T;
 
-    fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
-        let commands = system_state
+    fn init(system_state: &mut SystemState, world: &World, resources: &mut Resources) {
+        let applyable = system_state
             .apply_buffers
-            .entry(TypeId::of::<Commands>())
-            .or_insert(std::cell::UnsafeCell::new(Box::<Commands>::default()))
+            .entry(TypeId::of::<T>())
+            .or_insert(std::cell::UnsafeCell::new(Box::<T>::default()))
             .get_mut();
-        let commands = commands.downcast_mut::<Commands>().unwrap();
-        commands.set_entity_reserver(world.get_entity_reserver());
+        let applyable = applyable.downcast_mut::<T>().unwrap();
+        applyable.init(world, resources);
     }
 
     #[inline]
@@ -116,30 +112,30 @@ impl<'a> FetchSystemParam<'a> for FetchCommands {
     ) -> Option<Self::Item> {
         let commands = system_state
             .apply_buffers
-            .get(&TypeId::of::<Commands>())
+            .get(&TypeId::of::<T>())
             .unwrap();
-        let commands = (&mut *commands.get()).downcast_mut::<Commands>().unwrap();
-        let commands: &'a mut Commands = std::mem::transmute(commands);
+        let commands = (&mut *commands.get()).downcast_mut::<T>().unwrap();
+        let commands: &'a mut T = std::mem::transmute(commands);
         Some(commands)
     }
 }
 
-pub struct FetchArcCommands;
-impl SystemParam for Arc<Mutex<Commands>> {
-    type Fetch = FetchArcCommands;
+pub struct FetchArcApplyable<T>(PhantomData<T>);
+impl<'a, T: Applyable + Default> SystemParam for Arc<Mutex<T>> {
+    type Fetch = FetchArcApplyable<T>;
 }
 
-impl<'a> FetchSystemParam<'a> for FetchArcCommands {
-    type Item = Arc<Mutex<Commands>>;
+impl<'a, T: Applyable + Default> FetchSystemParam<'a> for FetchArcApplyable<T> {
+    type Item = Arc<Mutex<T>>;
 
-    fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
+    fn init(system_state: &mut SystemState, world: &World, resources: &mut Resources) {
         system_state
             .apply_buffers
-            .entry(TypeId::of::<Arc<Mutex<Commands>>>())
+            .entry(TypeId::of::<Arc<Mutex<T>>>())
             .or_insert(std::cell::UnsafeCell::new(Box::new({
-                let mut commands = Commands::default();
-                commands.set_entity_reserver(world.get_entity_reserver());
-                Arc::new(Mutex::new(commands))
+                let mut applyable = T::default();
+                applyable.init(world, resources);
+                Arc::new(Mutex::new(applyable))
             })));
     }
 
@@ -149,15 +145,15 @@ impl<'a> FetchSystemParam<'a> for FetchArcCommands {
         _world: &World,
         _resources: &Resources,
     ) -> Option<Self::Item> {
-        let commands = system_state
+        let applyable = system_state
             .apply_buffers
-            .get(&TypeId::of::<Arc<Mutex<Commands>>>())
+            .get(&TypeId::of::<Arc<Mutex<T>>>())
             .unwrap()
             .clone();
-        let commands = (&mut *commands.get())
-            .downcast_mut::<Arc<Mutex<Commands>>>()
+        let applyable = (&mut *applyable.get())
+            .downcast_mut::<Arc<Mutex<T>>>()
             .unwrap();
-        Some(commands.clone())
+        Some(applyable.clone())
     }
 }
 

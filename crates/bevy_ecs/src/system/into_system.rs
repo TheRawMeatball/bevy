@@ -23,17 +23,22 @@ pub struct SystemState {
 
 pub trait Applyable: Send + Sync + downcast_rs::Downcast {
     fn apply(&mut self, world: &mut World, resources: &mut Resources);
+    fn init(&mut self, world: &World, resources: &mut Resources);
 }
 
 impl<T: Applyable> Applyable for Arc<Mutex<T>> {
     fn apply(&mut self, world: &mut World, resources: &mut Resources) {
         self.lock().apply(world, resources);
     }
+
+    fn init(&mut self, world: &World, resources: &mut Resources) {
+        self.lock().init(world, resources);
+    }
 }
 
 downcast_rs::impl_downcast!(Applyable);
 
-// SAFE: UnsafeCell<Commands> and UnsafeCell<usize> only accessed from the thread they are scheduled on
+// SAFE: apply_buffers and UnsafeCell<usize> only accessed from the thread they are scheduled on
 unsafe impl Sync for SystemState {}
 
 impl SystemState {
