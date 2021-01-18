@@ -1,3 +1,4 @@
+mod applyable;
 mod commands;
 mod into_exclusive;
 mod into_system;
@@ -7,6 +8,7 @@ mod system;
 mod system_chaining;
 mod system_param;
 
+pub use applyable::*;
 pub use commands::*;
 pub use into_exclusive::*;
 pub use into_system::*;

@@ -1,8 +1,5 @@
 use super::SystemId;
-use crate::{
-    resource::{Resource, Resources},
-    Applyable, Bundle, Component, ComponentError, DynamicBundle, Entity, EntityReserver, World,
-};
+use crate::{Applyable, ApplyableExt, Bundle, Component, ComponentError, DynamicBundle, Entity, EntityReserver, FetchApplyable, SystemParam, World, resource::{Resource, Resources}};
 use bevy_utils::tracing::{debug, warn};
 use std::marker::PhantomData;
 
@@ -182,24 +179,51 @@ impl<T: Resource> Command for InsertLocalResource<T> {
 }
 
 /// A list of commands that will be run to populate a `World` and `Resources`.
-#[derive(Default)]
-pub struct Commands {
+pub struct Commands<'a> {
+    commands: &'a mut Vec<Box<dyn Command>>,
+    current_entity: &'a mut Option<Entity>,
+    entity_reserver: &'a mut Option<EntityReserver>,
+}
+
+pub struct CommandsBackend {
     commands: Vec<Box<dyn Command>>,
     current_entity: Option<Entity>,
     entity_reserver: Option<EntityReserver>,
 }
 
-impl Applyable for Commands {
-    fn apply(&mut self, world: &mut World, resources: &mut Resources) {
-        Commands::apply(self, world, resources);
-    }
+impl<'a> SystemParam for Commands<'a> {
+    type Fetch = FetchApplyable<CommandsBackend>;
+}
 
-    fn init(&mut self, world: &World, _resources: &mut Resources) {
-        self.set_entity_reserver(world.get_entity_reserver());
+impl Applyable for CommandsBackend {
+    fn apply(&mut self, world: &mut World, resources: &mut Resources) {
+        for command in self.commands.drain(..) {
+            command.write(world, resources);
+        }
     }
 }
 
-impl Commands {
+impl<'a> ApplyableExt<'a> for CommandsBackend {
+    type Front = Commands<'a>;
+
+    fn get_front(&'a mut self) -> Self::Front {
+        Commands {
+            commands: &mut self.commands,
+            entity_reserver: &mut self.entity_reserver,
+            current_entity: &mut self.current_entity,
+        }
+    }
+
+    fn new(world: &World, _resources: &mut Resources) -> Self {
+        Self {
+            commands: Vec::new(),
+            entity_reserver: Some(world.get_entity_reserver()),
+            current_entity: None, 
+        }
+    }
+}
+
+impl<'a> Commands<'a> {
     /// Creates a new entity with the components contained in `bundle`.
     ///
     /// Note that `bundle` is a [DynamicBundle], which is a collection of components. [DynamicBundle] is automatically implemented for tuples of components. You can also create your own bundle types by deriving [`derive@Bundle`]. If you would like to spawn an entity with a single component, consider wrapping the component in a tuple (which [DynamicBundle] is implemented for).
@@ -394,15 +418,15 @@ impl Commands {
 
     /// Returns the current entity, set by [`Self::spawn`] or with [`Self::set_current_entity`].
     pub fn current_entity(&self) -> Option<Entity> {
-        self.current_entity
+        *self.current_entity
     }
 
     pub fn set_current_entity(&mut self, entity: Entity) {
-        self.current_entity = Some(entity);
+        *self.current_entity = Some(entity);
     }
 
     pub fn clear_current_entity(&mut self) {
-        self.current_entity = None;
+        *self.current_entity = None;
     }
 
     pub fn for_current_entity(&mut self, f: impl FnOnce(Entity)) -> &mut Self {
@@ -414,24 +438,25 @@ impl Commands {
     }
 
     pub fn set_entity_reserver(&mut self, entity_reserver: EntityReserver) {
-        self.entity_reserver = Some(entity_reserver);
+        *self.entity_reserver = Some(entity_reserver);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{resource::Resources, Commands, World};
+    use crate::{ApplyableExt, CommandsBackend, World, resource::Resources};
 
     #[test]
     fn command_buffer() {
         let mut world = World::default();
         let mut resources = Resources::default();
-        let mut command_buffer = Commands::default();
-        command_buffer.set_entity_reserver(world.get_entity_reserver());
-        command_buffer.spawn((1u32, 2u64));
-        let entity = command_buffer.current_entity().unwrap();
-        command_buffer.insert_resource(3.14f32);
-        command_buffer.apply(&mut world, &mut resources);
+        let mut command_buffer = CommandsBackend::new(&world, &mut resources);
+        let mut commands = command_buffer.get_front();
+        
+        commands.spawn((1u32, 2u64));
+        let entity = commands.current_entity().unwrap();
+        commands.insert_resource(3.14f32);
+        commands.apply(&mut world, &mut resources);
         let results = world
             .query::<(&u32, &u64)>()
             .map(|(a, b)| (*a, *b))
@@ -439,9 +464,9 @@ mod tests {
         assert_eq!(results, vec![(1u32, 2u64)]);
         assert_eq!(*resources.get::<f32>().unwrap(), 3.14f32);
         // test entity despawn
-        command_buffer.despawn(entity);
-        command_buffer.despawn(entity); // double despawn shouldn't panic
-        command_buffer.apply(&mut world, &mut resources);
+        commands.despawn(entity);
+        commands.despawn(entity); // double despawn shouldn't panic
+        commands.apply(&mut world, &mut resources);
         let results2 = world
             .query::<(&u32, &u64)>()
             .map(|(a, b)| (*a, *b))
@@ -453,11 +478,12 @@ mod tests {
     fn remove_components() {
         let mut world = World::default();
         let mut resources = Resources::default();
-        let mut command_buffer = Commands::default();
-        command_buffer.set_entity_reserver(world.get_entity_reserver());
-        command_buffer.spawn((1u32, 2u64));
-        let entity = command_buffer.current_entity().unwrap();
-        command_buffer.apply(&mut world, &mut resources);
+        let mut command_buffer = CommandsBackend::new(&world, &mut resources);
+        let mut commands = command_buffer.get_front();
+        commands.set_entity_reserver(world.get_entity_reserver());
+        commands.spawn((1u32, 2u64));
+        let entity = commands.current_entity().unwrap();
+        commands.apply(&mut world, &mut resources);
         let results_before = world
             .query::<(&u32, &u64)>()
             .map(|(a, b)| (*a, *b))
@@ -465,9 +491,9 @@ mod tests {
         assert_eq!(results_before, vec![(1u32, 2u64)]);
 
         // test component removal
-        command_buffer.remove_one::<u32>(entity);
-        command_buffer.remove::<(u32, u64)>(entity);
-        command_buffer.apply(&mut world, &mut resources);
+        commands.remove_one::<u32>(entity);
+        commands.remove::<(u32, u64)>(entity);
+        commands.apply(&mut world, &mut resources);
         let results_after = world
             .query::<(&u32, &u64)>()
             .map(|(a, b)| (*a, *b))

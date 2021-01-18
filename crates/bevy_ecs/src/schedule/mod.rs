@@ -259,7 +259,7 @@ mod tests {
         let mut resources = Resources::default();
         resources.insert(ComputeTaskPool(TaskPool::default()));
 
-        fn insert(commands: &mut Commands) {
+        fn insert(mut commands: Commands) {
             commands.spawn((1u32,));
         }
 
