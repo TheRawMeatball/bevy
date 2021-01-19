@@ -1,8 +1,10 @@
+use std::hash::Hash;
+
 use crate::{
     app::{App, AppExit},
     event::Events,
     plugin::Plugin,
-    stage, startup_stage, PluginGroup, PluginGroupBuilder,
+    stage, startup_stage, Index, PluginGroup, PluginGroupBuilder,
 };
 use bevy_ecs::{
     clear_trackers_system, FromResources, IntoSystem, Resource, Resources, RunOnce, Schedule,
@@ -212,6 +214,14 @@ impl AppBuilder {
     {
         self.add_resource(Events::<T>::default())
             .add_system_to_stage(stage::EVENT, Events::<T>::update_system.system())
+    }
+
+    pub fn add_index<T>(&mut self)
+    where
+        T: Eq + Hash + Send + Sync + Clone + 'static,
+    {
+        self.add_resource(Index::<T>::default())
+            .add_system_to_stage(stage::PRE_UPDATE, Index::<T>::maintain_index.system());
     }
 
     /// Adds a resource to the current [App] and overwrites any resource previously added of the same type.

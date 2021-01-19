@@ -6,6 +6,7 @@ pub mod startup_stage;
 mod app;
 mod app_builder;
 mod event;
+mod indexes;
 mod plugin;
 mod plugin_group;
 mod schedule_runner;
@@ -14,6 +15,7 @@ pub use app::*;
 pub use app_builder::*;
 pub use bevy_derive::DynamicPlugin;
 pub use event::*;
+pub use indexes::*;
 pub use plugin::*;
 pub use plugin_group::*;
 pub use schedule_runner::*;
@@ -23,6 +25,7 @@ pub mod prelude {
         app::App,
         app_builder::AppBuilder,
         event::{EventReader, Events},
+        indexes::Index,
         stage, DynamicPlugin, Plugin, PluginGroup,
     };
 }
