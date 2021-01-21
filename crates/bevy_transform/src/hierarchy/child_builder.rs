@@ -207,7 +207,7 @@ mod tests {
         let mut world = World::default();
         let mut resources = Resources::default();
         let mut commands = Commands::default();
-        commands.set_entity_reserver(world.get_entity_reserver());
+        commands.set_entity_reserver(unsafe { world.get_entity_reserver() });
 
         let mut parent = None;
         let mut child1 = None;

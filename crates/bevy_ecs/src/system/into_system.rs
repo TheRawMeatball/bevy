@@ -17,6 +17,9 @@ pub struct SystemState {
     pub(crate) query_archetype_component_accesses: Vec<TypeAccess<ArchetypeComponent>>,
     pub(crate) query_accesses: Vec<Vec<QueryAccess>>,
     pub(crate) query_type_names: Vec<&'static str>,
+    /// ## SAFETY:
+    /// Objects stored in here can potentially hold references to [`World`] and [`Resources`].
+    /// Ensure they're dropped before them.
     pub(crate) apply_buffers: HashMap<TypeId, UnsafeCell<Box<dyn Applyable>>>,
     pub(crate) current_query_index: UnsafeCell<usize>,
 }

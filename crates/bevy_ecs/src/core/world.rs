@@ -50,7 +50,7 @@ impl World {
         let mut index = HashMap::default();
         index.insert(Vec::new(), 0);
         Self {
-            entities: Entities::default(),
+            entities: Default::default(),
             index,
             archetypes,
             archetype_generation: 0,
@@ -942,7 +942,9 @@ impl World {
     }
 
     /// Gets an entity reserver, which can be used to reserve entity ids in a multi-threaded context.
-    pub fn get_entity_reserver(&self) -> EntityReserver {
+    /// # SAFETY
+    /// Ensure returned object is dropped before `self`
+    pub unsafe fn get_entity_reserver(&self) -> EntityReserver {
         self.entities.get_reserver()
     }
 }

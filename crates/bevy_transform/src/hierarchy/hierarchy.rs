@@ -61,7 +61,7 @@ mod tests {
         let mut world = World::default();
         let mut resources = Resources::default();
         let mut command_buffer = Commands::default();
-        command_buffer.set_entity_reserver(world.get_entity_reserver());
+        command_buffer.set_entity_reserver(unsafe { world.get_entity_reserver() });
 
         command_buffer
             .spawn(("Another parent".to_owned(), 0u32))

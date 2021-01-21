@@ -138,7 +138,7 @@ mod test {
 
         // Root entity
         let mut commands = Commands::default();
-        commands.set_entity_reserver(world.get_entity_reserver());
+        commands.set_entity_reserver(unsafe { world.get_entity_reserver() });
         let mut children = Vec::new();
         commands
             .spawn((

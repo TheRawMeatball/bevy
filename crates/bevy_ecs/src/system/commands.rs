@@ -191,7 +191,8 @@ impl Applyable for Commands {
     }
 
     fn init(&mut self, world: &World, _resources: &mut Resources) {
-        self.set_entity_reserver(world.get_entity_reserver());
+        // SAFE: Applyable ensures `world` lives longer than `self`
+        self.set_entity_reserver(unsafe { world.get_entity_reserver() });
     }
 }
 
@@ -423,7 +424,7 @@ mod tests {
         let mut world = World::default();
         let mut resources = Resources::default();
         let mut command_buffer = Commands::default();
-        command_buffer.set_entity_reserver(world.get_entity_reserver());
+        command_buffer.set_entity_reserver(unsafe { world.get_entity_reserver() });
         command_buffer.spawn((1u32, 2u64));
         let entity = command_buffer.current_entity().unwrap();
         command_buffer.insert_resource(3.14f32);
@@ -450,7 +451,7 @@ mod tests {
         let mut world = World::default();
         let mut resources = Resources::default();
         let mut command_buffer = Commands::default();
-        command_buffer.set_entity_reserver(world.get_entity_reserver());
+        command_buffer.set_entity_reserver(unsafe { world.get_entity_reserver() });
         command_buffer.spawn((1u32, 2u64));
         let entity = command_buffer.current_entity().unwrap();
         command_buffer.apply(&mut world, &mut resources);

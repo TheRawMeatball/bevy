@@ -322,9 +322,9 @@ impl Entities {
         self.reserved = new_reserved.into();
     }
 
-    pub fn get_reserver(&self) -> EntityReserver {
-        // SAFE: reservers use atomics for anything write-related
-        let entities: &'static Entities = unsafe { mem::transmute(self) };
+    /// Ensure the returned object doesn't live longer than Entities
+    pub unsafe fn get_reserver(&self) -> EntityReserver {
+        let entities: &'static Entities =mem::transmute(self);
         EntityReserver { entities }
     }
 }
