@@ -1,6 +1,6 @@
 use super::system_param::FetchSystemParam;
 use crate::{
-    AccessConflict, ArchetypeComponent, QueryAccess, Resources, System, SystemId, SystemParam,
+    ArchetypeComponent, QueryAccess, Resources, System, SystemId, SystemParam,
     TypeAccess, World,
 };
 use bevy_utils::HashMap;
@@ -65,12 +65,8 @@ impl SystemState {
             }
             if !component_access.is_compatible(&self.archetype_component_access) {
                 conflict_index = Some(i);
-                conflict_name =
-                    match component_access.get_conflict(&self.archetype_component_access) {
-                        AccessConflict::None => None,
-                        AccessConflict::Element(element) => Some(element),
-                        AccessConflict::All => unreachable!(), // TODO verify
-                    }
+                conflict_name = component_access
+                    .get_conflict(&self.archetype_component_access)
                     .and_then(|archetype_component| {
                         query_accesses
                             .iter()
@@ -145,7 +141,7 @@ impl<Out: 'static> System for FuncSystem<Out> {
         (self.func)(&mut self.state, world, resources)
     }
 
-    fn run_exclusive(&mut self, world: &mut World, resources: &mut Resources) {
+    fn apply_buffers(&mut self, world: &mut World, resources: &mut Resources) {
         for (_, v) in self.state.apply_buffers.iter_mut() {
             v.get_mut().apply(world, resources);
         }
@@ -201,7 +197,7 @@ impl<In: 'static, Out: 'static> System for InputFuncSystem<In, Out> {
         (self.func)(input, &mut self.state, world, resources)
     }
 
-    fn run_exclusive(&mut self, world: &mut World, resources: &mut Resources) {
+    fn apply_buffers(&mut self, world: &mut World, resources: &mut Resources) {
         for (_, v) in self.state.apply_buffers.iter_mut() {
             v.get_mut().apply(world, resources);
         }
@@ -212,7 +208,7 @@ impl<In: 'static, Out: 'static> System for InputFuncSystem<In, Out> {
     }
 }
 
-pub trait IntoSystem<Params, SystemType: System> {
+pub trait IntoSystem<Params, SystemType> {
     fn system(self) -> SystemType;
 }
 
@@ -338,7 +334,7 @@ mod tests {
         clear_trackers_system,
         resource::{Res, ResMut, Resources},
         schedule::Schedule,
-        ChangedRes, Entity, Local, Or, Query, QuerySet, System, SystemStage, With, World,
+        ChangedRes, Entity, Local, Or, Query, QuerySet, Stage, System, SystemStage, With, World,
     };
 
     #[derive(Debug, Eq, PartialEq, Default)]
@@ -461,14 +457,14 @@ mod tests {
             SystemStage::single(clear_trackers_system.system()),
         );
 
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
         assert_eq!(*(world.get::<i32>(ent).unwrap()), 1);
 
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
         assert_eq!(*(world.get::<i32>(ent).unwrap()), 1);
 
         *resources.get_mut::<bool>().unwrap() = true;
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
         assert_eq!(*(world.get::<i32>(ent).unwrap()), 2);
     }
 
@@ -498,21 +494,21 @@ mod tests {
             SystemStage::single(clear_trackers_system.system()),
         );
 
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
         assert_eq!(*(world.get::<i32>(ent).unwrap()), 1);
 
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
         assert_eq!(*(world.get::<i32>(ent).unwrap()), 1);
 
         *resources.get_mut::<bool>().unwrap() = true;
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
         assert_eq!(*(world.get::<i32>(ent).unwrap()), 2);
 
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
         assert_eq!(*(world.get::<i32>(ent).unwrap()), 2);
 
         *resources.get_mut::<i32>().unwrap() = 20;
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
         assert_eq!(*(world.get::<i32>(ent).unwrap()), 3);
     }
 
@@ -583,7 +579,7 @@ mod tests {
         let mut update = SystemStage::parallel();
         update.add_system(system);
         schedule.add_stage("update", update);
-        schedule.initialize_and_run(world, resources);
+        schedule.run(world, resources);
     }
 
     #[derive(Default)]
@@ -597,7 +593,7 @@ mod tests {
         resources.insert(BufferRes::default());
         resources.insert(A);
         resources.insert(B);
-        run_system(&mut world, &mut resources, sys.system());
+        run_system(&mut world, &mut resources, sys);
     }
 
     #[test]

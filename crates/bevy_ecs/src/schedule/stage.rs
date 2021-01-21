@@ -1,25 +1,21 @@
+use bevy_utils::{HashMap, HashSet};
+use downcast_rs::{impl_downcast, Downcast};
 use std::{any::TypeId, borrow::Cow};
 
-use crate::{
-    ArchetypeComponent, InjectionPoint, Ordering, ParallelSystemDescriptor, Resources, RunCriteria,
-    SequentialSystemDescriptor, ShouldRun, System, SystemDescriptor, SystemId, TypeAccess, World,
-};
-use bevy_utils::HashMap;
-use downcast_rs::{impl_downcast, Downcast};
-
 use super::{ParallelSystemStageExecutor, SerialSystemStageExecutor, SystemStageExecutor};
+use crate::{
+    ArchetypeComponent, ExclusiveSystem, ExclusiveSystemDescriptor, InjectionPoint, Ordering,
+    ParallelSystemDescriptor, Resources, RunCriteria, ShouldRun, System, SystemId, TypeAccess,
+    World,
+};
 
 pub enum StageError {
     SystemAlreadyExists(SystemId),
 }
 
 pub trait Stage: Downcast + Send + Sync {
-    /// Stages can perform setup here. Initialize should be called for every stage before
-    /// calling [Stage::run]. Initialize will be called once per update, so internally this
-    /// should avoid re-doing work where possible.
-    fn initialize(&mut self, world: &mut World, resources: &mut Resources);
-
-    /// Runs the stage. This happens once per update (after [Stage::initialize] is called).
+    /// Runs the stage; this happens once per update.
+    /// Implementors must initialize all of their state and systems before running the first time.
     fn run(&mut self, world: &mut World, resources: &mut Resources);
 }
 
@@ -56,8 +52,8 @@ impl SystemStage {
         }
     }
 
-    pub fn single(system: impl Into<SystemDescriptor>) -> Self {
-        Self::serial().with_system(system)
+    pub fn single(system: impl Into<ExclusiveSystemDescriptor>) -> Self {
+        Self::serial().with_exclusive_system(system)
     }
 
     pub fn serial() -> Self {
@@ -68,8 +64,13 @@ impl SystemStage {
         Self::new(Box::new(ParallelSystemStageExecutor::default()))
     }
 
-    pub fn with_system(mut self, system: impl Into<SystemDescriptor>) -> Self {
+    pub fn with_system(mut self, system: impl Into<ParallelSystemDescriptor>) -> Self {
         self.add_system(system);
+        self
+    }
+
+    pub fn with_exclusive_system(mut self, system: impl Into<ExclusiveSystemDescriptor>) -> Self {
+        self.add_exclusive_system(system);
         self
     }
 
@@ -88,8 +89,16 @@ impl SystemStage {
         self
     }
 
-    pub fn add_system(&mut self, system: impl Into<SystemDescriptor>) -> &mut Self {
+    pub fn add_system(&mut self, system: impl Into<ParallelSystemDescriptor>) -> &mut Self {
         self.system_sets[0].add_system(system);
+        self
+    }
+
+    pub fn add_exclusive_system(
+        &mut self,
+        system: impl Into<ExclusiveSystemDescriptor>,
+    ) -> &mut Self {
+        self.system_sets[0].add_exclusive_system(system);
         self
     }
 
@@ -101,107 +110,170 @@ impl SystemStage {
         self.executor.downcast_mut()
     }
 
+    /// Determines if the parallel systems dependency graph has a cycle using depth first search.
+    fn has_a_dependency_cycle(&self) -> bool {
+        fn is_part_of_a_cycle(
+            index: &SystemIndex,
+            visited: &mut HashSet<SystemIndex>,
+            current: &mut HashSet<SystemIndex>,
+            graph: &HashMap<SystemIndex, Vec<SystemIndex>>,
+        ) -> bool {
+            if current.contains(index) {
+                return true;
+            } else if visited.contains(index) {
+                return false;
+            }
+            visited.insert(*index);
+            current.insert(*index);
+            for dependency in graph.get(index).unwrap() {
+                if is_part_of_a_cycle(dependency, visited, current, graph) {
+                    return true;
+                }
+            }
+            current.remove(index);
+            false
+        }
+        let mut visited =
+            HashSet::with_capacity_and_hasher(self.parallel_dependencies.len(), Default::default());
+        let mut current =
+            HashSet::with_capacity_and_hasher(self.parallel_dependencies.len(), Default::default());
+        for system_index in self.parallel_dependencies.keys() {
+            if is_part_of_a_cycle(
+                system_index,
+                &mut visited,
+                &mut current,
+                &self.parallel_dependencies,
+            ) {
+                return true;
+            }
+        }
+        false
+    }
+
     // TODO tests
     fn rebuild_orders_and_dependencies(&mut self) {
-        // TODO consider doing this in two passes: collect labels, then resolve labels.
+        self.parallel_dependencies.clear();
         self.at_start.clear();
         self.before_commands.clear();
         self.at_end.clear();
-        self.parallel_dependencies.clear();
         let mut parallel_labels_map = HashMap::<Label, SystemIndex>::default();
-        let mut at_start_labels_map = HashMap::<Label, usize>::default();
-        let mut before_commands_labels_map = HashMap::<Label, usize>::default();
-        let mut at_end_labels_map = HashMap::<Label, usize>::default();
-        let insert_index = |index: SystemIndex,
-                            descriptor: &SequentialSystemDescriptor,
-                            order: &mut Vec<SystemIndex>,
-                            map: &mut HashMap<Label, usize>| {
-            let order_index = match descriptor.ordering {
-                Ordering::None => {
-                    order.push(index);
-                    order.len() - 1
+        let mut at_start_labels_map = HashMap::<Label, SystemIndex>::default();
+        let mut before_commands_labels_map = HashMap::<Label, SystemIndex>::default();
+        let mut at_end_labels_map = HashMap::<Label, SystemIndex>::default();
+        // Collect labels.
+        for (set_index, system_set) in self.system_sets.iter().enumerate() {
+            for (system_index, descriptor) in system_set.parallel_systems.iter().enumerate() {
+                if let Some(label) = descriptor.label {
+                    parallel_labels_map.insert(
+                        label,
+                        SystemIndex {
+                            set: set_index,
+                            system: system_index,
+                        },
+                    );
                 }
-                Ordering::Before(target) => {
-                    let &target_index = map
-                        .get(target)
-                        .unwrap_or_else(|| todo!("some error message that makes sense"));
-                    order.insert(target_index, index);
-                    for value in map.values_mut().filter(|value| **value >= target_index) {
-                        *value += 1;
-                    }
-                    target_index
-                }
-                Ordering::After(target) => {
-                    let &target_index = map
-                        .get(target)
-                        .unwrap_or_else(|| todo!("some error message that makes sense"));
-                    order.insert(target_index + 1, index);
-                    for value in map.values_mut().filter(|value| **value > target_index) {
-                        *value += 1;
-                    }
-                    target_index + 1
-                }
-            };
-            if let Some(label) = descriptor.label {
-                map.insert(label, order_index);
             }
-        };
-        for (set_index, system_set) in self.system_sets.iter_mut().enumerate() {
-            for (system_index, descriptor) in system_set.sequential_systems.iter().enumerate() {
+            for (system_index, descriptor) in system_set.exclusive_systems.iter().enumerate() {
+                if let Some(label) = descriptor.label {
+                    let index = SystemIndex {
+                        set: set_index,
+                        system: system_index,
+                    };
+                    use InjectionPoint::*;
+                    match descriptor.injection_point {
+                        AtStart => at_start_labels_map.insert(label, index),
+                        BeforeCommands => before_commands_labels_map.insert(label, index),
+                        AtEnd => at_end_labels_map.insert(label, index),
+                    };
+                }
+            }
+        }
+        // Populate parallel dependency tree and sequential orders.
+        let mut new_dependencies = Vec::new(); // Scratch space.
+        for (set_index, system_set) in self.system_sets.iter().enumerate() {
+            for (system_index, descriptor) in system_set.parallel_systems.iter().enumerate() {
+                if !descriptor.dependencies.is_empty() {
+                    let index = SystemIndex {
+                        set: set_index,
+                        system: system_index,
+                    };
+                    let dependencies = self
+                        .parallel_dependencies
+                        .entry(index)
+                        .or_insert_with(Vec::new);
+                    new_dependencies.extend(
+                        descriptor
+                            .dependencies
+                            .iter()
+                            .map(|label| {
+                                // TODO better error message
+                                *parallel_labels_map
+                                    .get(label)
+                                    .unwrap_or_else(|| panic!("no such system"))
+                            })
+                            .filter(|dependency| !dependencies.contains(dependency)),
+                    );
+                    dependencies.extend(new_dependencies.drain(..));
+                    for dependant in descriptor.dependants.iter().map(|label| {
+                        // TODO better error message
+                        *parallel_labels_map
+                            .get(label)
+                            .unwrap_or_else(|| panic!("no such system"))
+                    }) {
+                        let dependencies = self
+                            .parallel_dependencies
+                            .entry(dependant)
+                            .or_insert_with(Vec::new);
+                        if !dependencies.contains(&index) {
+                            dependencies.push(index);
+                        }
+                    }
+                }
+            }
+            for (system_index, descriptor) in system_set.exclusive_systems.iter().enumerate() {
                 let index = SystemIndex {
                     set: set_index,
                     system: system_index,
                 };
                 use InjectionPoint::*;
                 match descriptor.injection_point {
-                    AtStart => insert_index(
+                    AtStart => insert_sequential_system(
                         index,
-                        descriptor,
+                        descriptor.ordering,
                         &mut self.at_start,
-                        &mut at_start_labels_map,
+                        &at_start_labels_map,
                     ),
-                    BeforeCommands => insert_index(
+                    BeforeCommands => insert_sequential_system(
                         index,
-                        descriptor,
+                        descriptor.ordering,
                         &mut self.before_commands,
-                        &mut before_commands_labels_map,
+                        &before_commands_labels_map,
                     ),
-                    AtEnd => {
-                        insert_index(index, descriptor, &mut self.at_end, &mut at_end_labels_map)
-                    }
+                    AtEnd => insert_sequential_system(
+                        index,
+                        descriptor.ordering,
+                        &mut self.at_end,
+                        &at_end_labels_map,
+                    ),
                 }
             }
-            for (system_index, descriptor) in system_set.parallel_systems.iter().enumerate() {
-                // TODO dependency tree validation
-                let index = SystemIndex {
-                    set: set_index,
-                    system: system_index,
-                };
-                if !descriptor.dependencies.is_empty() {
-                    let dependencies = descriptor
-                        .dependencies
-                        .iter()
-                        .map(|label| {
-                            *parallel_labels_map
-                                .get(label)
-                                .unwrap_or_else(|| todo!("some error message that makes sense"))
-                        })
-                        .collect();
-                    self.parallel_dependencies.insert(index, dependencies);
-                }
-                if let Some(label) = descriptor.label {
-                    parallel_labels_map.insert(label, index);
-                }
-            }
+        }
+        if self.has_a_dependency_cycle() {
+            panic!("the graph cycles"); // TODO better error message.
         }
     }
 
     pub fn run_once(&mut self, world: &mut World, resources: &mut Resources) {
-        if self
+        let mut is_dirty = false;
+        for system_set in self
             .system_sets
-            .iter()
-            .any(|system_set| system_set.is_dirty)
+            .iter_mut()
+            .filter(|system_set| system_set.is_dirty)
         {
+            is_dirty = true;
+            system_set.initialize(world, resources);
+        }
+        if is_dirty {
             self.rebuild_orders_and_dependencies();
         }
         self.executor.execute_stage(
@@ -219,13 +291,47 @@ impl SystemStage {
     }
 }
 
-impl Stage for SystemStage {
-    fn initialize(&mut self, world: &mut World, resources: &mut Resources) {
-        for set in &mut self.system_sets {
-            set.initialize(world, resources);
+fn find_target_index(
+    target: Label,
+    order: &[SystemIndex],
+    map: &HashMap<Label, SystemIndex>,
+) -> Option<usize> {
+    // TODO better error message
+    let target = map.get(target).unwrap_or_else(|| panic!("no such system"));
+    order
+        .iter()
+        .enumerate()
+        .find_map(|(order_index, system_index)| {
+            if system_index == target {
+                Some(order_index)
+            } else {
+                None
+            }
+        })
+}
+
+fn insert_sequential_system(
+    system_index: SystemIndex,
+    ordering: Ordering,
+    order: &mut Vec<SystemIndex>,
+    map: &HashMap<Label, SystemIndex>,
+) {
+    match ordering {
+        Ordering::None => order.push(system_index),
+        Ordering::Before(target) => {
+            if let Some(target) = find_target_index(target, order, map) {
+                order.insert(target, system_index);
+            }
+        }
+        Ordering::After(target) => {
+            if let Some(target) = find_target_index(target, order, map) {
+                order.insert(target + 1, system_index);
+            }
         }
     }
+}
 
+impl Stage for SystemStage {
     fn run(&mut self, world: &mut World, resources: &mut Resources) {
         loop {
             match self.run_criteria.should_run(world, resources) {
@@ -250,9 +356,9 @@ pub struct SystemSet {
     run_criteria: RunCriteria,
     is_dirty: bool,
     parallel_systems: Vec<ParallelSystemDescriptor>,
-    sequential_systems: Vec<SequentialSystemDescriptor>,
+    exclusive_systems: Vec<ExclusiveSystemDescriptor>,
     uninitialized_parallel: Vec<usize>,
-    uninitialized_sequential: Vec<usize>,
+    uninitialized_exclusive: Vec<usize>,
 }
 
 impl SystemSet {
@@ -261,8 +367,8 @@ impl SystemSet {
     }
 
     fn initialize(&mut self, world: &mut World, resources: &mut Resources) {
-        for index in self.uninitialized_sequential.drain(..) {
-            self.sequential_systems[index]
+        for index in self.uninitialized_exclusive.drain(..) {
+            self.exclusive_systems[index]
                 .system
                 .initialize(world, resources);
         }
@@ -281,11 +387,8 @@ impl SystemSet {
         &mut self.run_criteria
     }
 
-    pub(crate) fn exclusive_system_mut(
-        &mut self,
-        index: usize,
-    ) -> &mut dyn System<In = (), Out = ()> {
-        &mut *self.sequential_systems[index].system
+    pub(crate) fn exclusive_system_mut(&mut self, index: usize) -> &mut impl ExclusiveSystem {
+        &mut self.exclusive_systems[index].system
     }
 
     pub(crate) fn parallel_system_mut(
@@ -323,32 +426,40 @@ impl SystemSet {
             .map(|descriptor| descriptor.system_mut())
     }
 
-    pub fn with_system(mut self, system: impl Into<SystemDescriptor>) -> Self {
+    pub fn with_system(mut self, system: impl Into<ParallelSystemDescriptor>) -> Self {
         self.add_system(system);
         self
     }
 
-    pub fn add_system(&mut self, system: impl Into<SystemDescriptor>) -> &mut Self {
-        match system.into() {
-            SystemDescriptor::Parallel(descriptor) => {
-                self.uninitialized_parallel
-                    .push(self.parallel_systems.len());
-                self.parallel_systems.push(descriptor);
-            }
-            SystemDescriptor::Sequential(descriptor) => {
-                self.uninitialized_sequential
-                    .push(self.sequential_systems.len());
-                self.sequential_systems.push(descriptor);
-            }
-        }
+    pub fn with_exclusive_system(mut self, system: impl Into<ExclusiveSystemDescriptor>) -> Self {
+        self.add_exclusive_system(system);
+        self
+    }
+
+    pub fn add_system(&mut self, system: impl Into<ParallelSystemDescriptor>) -> &mut Self {
+        self.uninitialized_parallel
+            .push(self.parallel_systems.len());
+        self.parallel_systems.push(system.into());
+
+        self.is_dirty = true;
+        self
+    }
+
+    pub fn add_exclusive_system(
+        &mut self,
+        system: impl Into<ExclusiveSystemDescriptor>,
+    ) -> &mut Self {
+        self.uninitialized_exclusive
+            .push(self.exclusive_systems.len());
+        self.exclusive_systems.push(system.into());
         self.is_dirty = true;
         self
     }
 }
 
-impl<S: Into<SystemDescriptor>> From<S> for SystemStage {
-    fn from(system: S) -> Self {
-        SystemStage::single(system)
+impl<S: Into<ExclusiveSystemDescriptor>> From<S> for SystemStage {
+    fn from(descriptor: S) -> Self {
+        SystemStage::single(descriptor.into())
     }
 }
 
@@ -410,7 +521,7 @@ impl System for RunOnce {
         })
     }
 
-    fn run_exclusive(&mut self, _world: &mut World, _resources: &mut Resources) {}
+    fn apply_buffers(&mut self, _world: &mut World, _resources: &mut Resources) {}
 
     fn initialize(&mut self, _world: &mut World, _resources: &mut Resources) {}
 }

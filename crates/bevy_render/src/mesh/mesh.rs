@@ -2,7 +2,7 @@ use crate::{
     pipeline::{IndexFormat, PrimitiveTopology, RenderPipelines, VertexFormat},
     renderer::{BufferInfo, BufferUsage, RenderResourceContext, RenderResourceId},
 };
-use bevy_app::prelude::{EventReader, Events};
+use bevy_app::prelude::EventReader;
 use bevy_asset::{AssetEvent, Assets, Handle};
 use bevy_core::AsBytes;
 use bevy_ecs::{Changed, Entity, Local, Mut, Query, QuerySet, Res, With};
@@ -278,7 +278,7 @@ impl Mesh {
         }
     }
 
-    fn count_vertices(&self) -> usize {
+    pub fn count_vertices(&self) -> usize {
         let mut vertex_count: Option<usize> = None;
         for (attribute_name, attribute_data) in self.attributes.iter() {
             let attribute_len = attribute_data.len();
@@ -349,7 +349,6 @@ pub struct MeshEntities {
 
 #[derive(Default)]
 pub struct MeshResourceProviderState {
-    mesh_event_reader: EventReader<AssetEvent<Mesh>>,
     mesh_entities: HashMap<Handle<Mesh>, MeshEntities>,
 }
 
@@ -357,7 +356,7 @@ pub fn mesh_resource_provider_system(
     mut state: Local<MeshResourceProviderState>,
     render_resource_context: Res<Box<dyn RenderResourceContext>>,
     meshes: Res<Assets<Mesh>>,
-    mesh_events: Res<Events<AssetEvent<Mesh>>>,
+    mut mesh_events: EventReader<AssetEvent<Mesh>>,
     mut queries: QuerySet<(
         Query<&mut RenderPipelines, With<Handle<Mesh>>>,
         Query<(Entity, &Handle<Mesh>, &mut RenderPipelines), Changed<Handle<Mesh>>>,
@@ -365,7 +364,7 @@ pub fn mesh_resource_provider_system(
 ) {
     let mut changed_meshes = HashSet::default();
     let render_resource_context = &**render_resource_context;
-    for event in state.mesh_event_reader.iter(&mesh_events) {
+    for event in mesh_events.iter() {
         match event {
             AssetEvent::Created { ref handle } => {
                 changed_meshes.insert(handle.clone_weak());
@@ -387,19 +386,21 @@ pub fn mesh_resource_provider_system(
     for changed_mesh_handle in changed_meshes.iter() {
         if let Some(mesh) = meshes.get(changed_mesh_handle) {
             // TODO: check for individual buffer changes in non-interleaved mode
-            let index_buffer = render_resource_context.create_buffer_with_data(
-                BufferInfo {
-                    buffer_usage: BufferUsage::INDEX,
-                    ..Default::default()
-                },
-                &mesh.get_index_buffer_bytes().unwrap(),
-            );
+            if let Some(data) = mesh.get_index_buffer_bytes() {
+                let index_buffer = render_resource_context.create_buffer_with_data(
+                    BufferInfo {
+                        buffer_usage: BufferUsage::INDEX,
+                        ..Default::default()
+                    },
+                    &data,
+                );
 
-            render_resource_context.set_asset_resource(
-                changed_mesh_handle,
-                RenderResourceId::Buffer(index_buffer),
-                INDEX_BUFFER_ASSET_INDEX,
-            );
+                render_resource_context.set_asset_resource(
+                    changed_mesh_handle,
+                    RenderResourceId::Buffer(index_buffer),
+                    INDEX_BUFFER_ASSET_INDEX,
+                );
+            }
 
             let interleaved_buffer = mesh.get_vertex_buffer_data();
 

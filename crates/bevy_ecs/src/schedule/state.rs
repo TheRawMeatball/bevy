@@ -1,4 +1,4 @@
-use crate::{Resource, Resources, Stage, SystemDescriptor, SystemStage, World};
+use crate::{ParallelSystemDescriptor, Resource, Resources, Stage, SystemStage, World};
 use bevy_utils::HashMap;
 use std::{mem::Discriminant, ops::Deref};
 use thiserror::Error;
@@ -66,19 +66,31 @@ impl<T> StateStage<T> {
         self
     }
 
-    pub fn on_state_enter(&mut self, state: T, system: impl Into<SystemDescriptor>) -> &mut Self {
+    pub fn on_state_enter(
+        &mut self,
+        state: T,
+        system: impl Into<ParallelSystemDescriptor>,
+    ) -> &mut Self {
         self.enter_stage(state, |system_stage: &mut SystemStage| {
             system_stage.add_system(system)
         })
     }
 
-    pub fn on_state_exit(&mut self, state: T, system: impl Into<SystemDescriptor>) -> &mut Self {
+    pub fn on_state_exit(
+        &mut self,
+        state: T,
+        system: impl Into<ParallelSystemDescriptor>,
+    ) -> &mut Self {
         self.exit_stage(state, |system_stage: &mut SystemStage| {
             system_stage.add_system(system)
         })
     }
 
-    pub fn on_state_update(&mut self, state: T, system: impl Into<SystemDescriptor>) -> &mut Self {
+    pub fn on_state_update(
+        &mut self,
+        state: T,
+        system: impl Into<ParallelSystemDescriptor>,
+    ) -> &mut Self {
         self.update_stage(state, |system_stage: &mut SystemStage| {
             system_stage.add_system(system)
         })
@@ -138,14 +150,6 @@ impl<T> StateStage<T> {
 
 #[allow(clippy::mem_discriminant_non_enum)]
 impl<T: Resource + Clone> Stage for StateStage<T> {
-    fn initialize(&mut self, world: &mut World, resources: &mut Resources) {
-        for state_stages in self.stages.values_mut() {
-            state_stages.enter.initialize(world, resources);
-            state_stages.update.initialize(world, resources);
-            state_stages.exit.initialize(world, resources);
-        }
-    }
-
     fn run(&mut self, world: &mut World, resources: &mut Resources) {
         let current_stage = loop {
             let (next_stage, current_stage) = {

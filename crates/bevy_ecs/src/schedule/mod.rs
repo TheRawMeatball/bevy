@@ -44,9 +44,18 @@ impl Schedule {
     pub fn with_system_in_stage(
         mut self,
         stage_name: &'static str,
-        system: impl Into<SystemDescriptor>,
+        system: impl Into<ParallelSystemDescriptor>,
     ) -> Self {
         self.add_system_to_stage(stage_name, system);
+        self
+    }
+
+    pub fn with_exclusive_system_in_stage(
+        mut self,
+        stage_name: &'static str,
+        system: impl Into<ExclusiveSystemDescriptor>,
+    ) -> Self {
+        self.add_exclusive_system_to_stage(stage_name, system);
         self
     }
 
@@ -103,7 +112,7 @@ impl Schedule {
     pub fn add_system_to_stage(
         &mut self,
         stage_name: &'static str,
-        system: impl Into<SystemDescriptor>,
+        system: impl Into<ParallelSystemDescriptor>,
     ) -> &mut Self {
         let stage = self
             .get_stage_mut::<SystemStage>(stage_name)
@@ -114,6 +123,23 @@ impl Schedule {
                 )
             });
         stage.add_system(system);
+        self
+    }
+
+    pub fn add_exclusive_system_to_stage(
+        &mut self,
+        stage_name: &'static str,
+        system: impl Into<ExclusiveSystemDescriptor>,
+    ) -> &mut Self {
+        let stage = self
+            .get_stage_mut::<SystemStage>(stage_name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Stage '{}' does not exist or is not a SystemStage",
+                    stage_name
+                )
+            });
+        stage.add_exclusive_system(system);
         self
     }
 
@@ -151,22 +177,9 @@ impl Schedule {
             stage.run(world, resources);
         }
     }
-
-    /// Shorthand for [Schedule::initialize] and [Schedule::run]
-    pub fn initialize_and_run(&mut self, world: &mut World, resources: &mut Resources) {
-        self.initialize(world, resources);
-        self.run(world, resources);
-    }
 }
 
 impl Stage for Schedule {
-    fn initialize(&mut self, world: &mut World, resources: &mut Resources) {
-        for name in self.stage_order.iter() {
-            let stage = self.stages.get_mut(name).unwrap();
-            stage.initialize(world, resources);
-        }
-    }
-
     fn run(&mut self, world: &mut World, resources: &mut Resources) {
         loop {
             match self.run_criteria.should_run(world, resources) {
@@ -229,7 +242,7 @@ impl RunCriteria {
                 self.initialized = true;
             }
             let should_run = run_criteria.run((), world, resources);
-            run_criteria.run_exclusive(world, resources);
+            run_criteria.apply_buffers(world, resources);
             // don't run when no result is returned or false is returned
             should_run.unwrap_or(ShouldRun::No)
         } else {
@@ -244,7 +257,7 @@ mod tests {
         resource::Resources,
         schedule::{Schedule, SystemStage},
         system::Query,
-        Commands, Entity, IntoSystem, World,
+        Commands, Entity, IntoSystem, Stage, World,
     };
     use bevy_tasks::{ComputeTaskPool, TaskPool};
 
@@ -281,7 +294,7 @@ mod tests {
         post_archetype_change.add_system(read.system());
         schedule.add_stage("PostArchetypeChange", post_archetype_change);
 
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
     }
 
     #[test]
@@ -305,13 +318,13 @@ mod tests {
         }
 
         let mut update = SystemStage::parallel();
-        update.add_system(insert.system());
+        update.add_exclusive_system(insert.system());
         update.add_system(read.system());
 
         let mut schedule = Schedule::default();
         schedule.add_stage("update", update);
 
-        schedule.initialize_and_run(&mut world, &mut resources);
+        schedule.run(&mut world, &mut resources);
     }
 
     // TODO more relevant tests
