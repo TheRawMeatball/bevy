@@ -259,6 +259,7 @@ impl<T: Clone> State<T> {
     }
 }
 
+#[allow(clippy::mem_discriminant_non_enum)]
 mod alternate {
     use std::{any::TypeId, mem::discriminant};
 
