@@ -259,6 +259,106 @@ impl<T: Clone> State<T> {
     }
 }
 
+mod alternate {
+    use std::{any::TypeId, mem::discriminant};
+
+    use crate::{
+        ArchetypeComponent, ResMut, Resource, ShouldRun, State, System, SystemId, TypeAccess,
+    };
+
+    impl<T: Clone + Resource> State<T> {
+        pub fn on_update(val: T) -> impl System<In = (), Out = ShouldRun> {
+            let d = discriminant(&val);
+            Wrapper::new(move |s| discriminant(&s.current) == d)
+        }
+
+        pub fn on_entry(val: T) -> impl System<In = (), Out = ShouldRun> {
+            let d = discriminant(&val);
+            Wrapper::new(move |s: &State<T>| s.next().map_or(false, |s| discriminant(s) == d))
+        }
+
+        pub fn on_exit(val: T) -> impl System<In = (), Out = ShouldRun> {
+            let d = discriminant(&val);
+            Wrapper::new(move |s: &State<T>| s.next().is_some() && discriminant(&s.current) == d)
+        }
+
+        // TODO: Add a metod to AppBuilder that adds this system and the necessary resource
+        pub fn update(mut state: ResMut<State<T>>) {
+            state.previous.take();
+            if let Some(next) = state.next.take() {
+                state.previous = Some(std::mem::replace(&mut state.current, next));
+            }
+        }
+    }
+
+    impl<T: Clone + Resource> Wrapper<T> {
+        fn new(comparer: impl Fn(&State<T>) -> bool + Send + Sync + 'static) -> Self {
+            let mut resource_access = TypeAccess::default();
+            resource_access.add_read(std::any::TypeId::of::<State<T>>());
+            Wrapper {
+                comparer: Box::new(comparer),
+                resource_access,
+                id: SystemId::new(),
+                archetype_access: TypeAccess::default(),
+            }
+        }
+    }
+
+    struct Wrapper<T: Clone + Resource> {
+        comparer: Box<dyn Fn(&State<T>) -> bool + Send + Sync + 'static>,
+        resource_access: TypeAccess<TypeId>,
+        id: SystemId,
+        archetype_access: TypeAccess<ArchetypeComponent>,
+    }
+
+    impl<T: Clone + Resource> System for Wrapper<T> {
+        type In = ();
+        type Out = ShouldRun;
+
+        fn name(&self) -> std::borrow::Cow<'static, str> {
+            std::borrow::Cow::Owned(format!(
+                "State checker for state {}",
+                std::any::type_name::<T>()
+            ))
+        }
+
+        fn id(&self) -> crate::SystemId {
+            self.id
+        }
+
+        fn archetype_component_access(&self) -> &TypeAccess<ArchetypeComponent> {
+            &self.archetype_access
+        }
+
+        fn resource_access(&self) -> &TypeAccess<std::any::TypeId> {
+            &self.resource_access
+        }
+
+        fn is_thread_local(&self) -> bool {
+            false
+        }
+
+        unsafe fn run_unsafe(
+            &mut self,
+            _input: Self::In,
+            _world: &crate::World,
+            resources: &crate::Resources,
+        ) -> Option<Self::Out> {
+            Some(if (self.comparer)(&*resources.get::<State<T>>().unwrap()) {
+                ShouldRun::Yes
+            } else {
+                ShouldRun::No
+            })
+        }
+
+        fn update_access(&mut self, _world: &crate::World) {}
+
+        fn apply_buffers(&mut self, _world: &mut crate::World, _resources: &mut crate::Resources) {}
+
+        fn initialize(&mut self, _world: &mut crate::World, _resources: &mut crate::Resources) {}
+    }
+}
+
 impl<T: Clone> Deref for State<T> {
     type Target = T;
 
