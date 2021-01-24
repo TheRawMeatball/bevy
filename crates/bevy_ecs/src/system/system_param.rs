@@ -1,5 +1,5 @@
 use crate::{
-    ArchetypeComponent, ChangedRes, Commands, Fetch, FromResources, Local, Or, Query, QueryAccess,
+    Applyable, ArchetypeComponent, ChangedRes, Fetch, FromResources, Local, Or, Query, QueryAccess,
     QueryFilter, QuerySet, QueryTuple, Res, ResMut, Resource, ResourceIndex, Resources,
     SystemState, ThreadLocal, TypeAccess, World, WorldQuery,
 };
@@ -90,19 +90,19 @@ impl<'a, T: QueryTuple> FetchSystemParam<'a> for FetchQuerySet<T> {
     }
 }
 
-pub struct FetchCommands;
+pub struct FetchApplyable<T>(PhantomData<T>);
 
-impl<'a> SystemParam for &'a mut Commands {
-    type Fetch = FetchCommands;
+impl<'a, T: Applyable + Default> SystemParam for &'a mut T {
+    type Fetch = FetchApplyable<T>;
 }
-impl<'a> FetchSystemParam<'a> for FetchCommands {
-    type Item = &'a mut Commands;
+impl<'a, T: Applyable + Default> FetchSystemParam<'a> for FetchApplyable<T> {
+    type Item = &'a mut T;
 
-    fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
-        // SAFE: this is called with unique access to SystemState
-        unsafe {
-            (&mut *system_state.commands.get()).set_entity_reserver(world.get_entity_reserver())
-        }
+    fn init(system_state: &mut SystemState, world: &World, resources: &mut Resources) {
+        let mut applyable = T::default();
+        applyable.init(world, resources);
+        let insert = std::cell::UnsafeCell::new(Box::new(applyable));
+        system_state.apply_buffers.insert(TypeId::of::<T>(), insert);
     }
 
     #[inline]
@@ -111,24 +111,32 @@ impl<'a> FetchSystemParam<'a> for FetchCommands {
         _world: &'a World,
         _resources: &'a Resources,
     ) -> Option<Self::Item> {
-        Some(&mut *system_state.commands.get())
+        let commands = system_state.apply_buffers.get(&TypeId::of::<T>()).unwrap();
+        let commands = (&mut *commands.get()).downcast_mut::<T>().unwrap();
+        let commands: &'a mut T = std::mem::transmute(commands);
+        Some(commands)
     }
 }
 
-pub struct FetchArcCommands;
-impl SystemParam for Arc<Mutex<Commands>> {
-    type Fetch = FetchArcCommands;
+pub struct FetchArcApplyable<T>(PhantomData<T>);
+impl<'a, T: Applyable + Default> SystemParam for Arc<Mutex<T>> {
+    type Fetch = FetchArcApplyable<T>;
 }
 
-impl<'a> FetchSystemParam<'a> for FetchArcCommands {
-    type Item = Arc<Mutex<Commands>>;
+impl<'a, T: Applyable + Default> FetchSystemParam<'a> for FetchArcApplyable<T> {
+    type Item = Arc<Mutex<T>>;
 
-    fn init(system_state: &mut SystemState, world: &World, _resources: &mut Resources) {
-        system_state.arc_commands.get_or_insert_with(|| {
-            let mut commands = Commands::default();
-            commands.set_entity_reserver(world.get_entity_reserver());
-            Arc::new(Mutex::new(commands))
-        });
+    fn init(system_state: &mut SystemState, world: &World, resources: &mut Resources) {
+        system_state
+            .apply_buffers
+            .entry(TypeId::of::<Arc<Mutex<T>>>())
+            .or_insert_with(|| {
+                std::cell::UnsafeCell::new(Box::new({
+                    let mut applyable = T::default();
+                    applyable.init(world, resources);
+                    Arc::new(Mutex::new(applyable))
+                }))
+            });
     }
 
     #[inline]
@@ -137,7 +145,14 @@ impl<'a> FetchSystemParam<'a> for FetchArcCommands {
         _world: &World,
         _resources: &Resources,
     ) -> Option<Self::Item> {
-        Some(system_state.arc_commands.as_ref().unwrap().clone())
+        let applyable = system_state
+            .apply_buffers
+            .get(&TypeId::of::<Arc<Mutex<T>>>())
+            .unwrap();
+        let applyable = (&mut *applyable.get())
+            .downcast_mut::<Arc<Mutex<T>>>()
+            .unwrap();
+        Some(applyable.clone())
     }
 }
 

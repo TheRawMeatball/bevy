@@ -1,7 +1,7 @@
 use super::SystemId;
 use crate::{
     resource::{Resource, Resources},
-    Bundle, Component, ComponentError, DynamicBundle, Entity, EntityReserver, World,
+    Applyable, Bundle, Component, ComponentError, DynamicBundle, Entity, EntityReserver, World,
 };
 use bevy_utils::tracing::{debug, warn};
 use std::marker::PhantomData;
@@ -183,6 +183,16 @@ pub struct Commands {
     commands: Vec<Box<dyn Command>>,
     current_entity: Option<Entity>,
     entity_reserver: Option<EntityReserver>,
+}
+
+impl Applyable for Commands {
+    fn apply(&mut self, world: &mut World, resources: &mut Resources) {
+        Commands::apply(self, world, resources);
+    }
+
+    fn init(&mut self, world: &World, _resources: &mut Resources) {
+        self.set_entity_reserver(world.get_entity_reserver());
+    }
 }
 
 impl Commands {

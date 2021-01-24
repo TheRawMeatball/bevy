@@ -1,4 +1,4 @@
-use bevy_ecs::{Local, Res, ResMut, SystemParam};
+use bevy_ecs::{Applyable, Local, Res, ResMut, SystemParam};
 use bevy_utils::tracing::trace;
 use std::{fmt, marker::PhantomData};
 
@@ -126,6 +126,43 @@ fn map_instance_event<T>(event_instance: &EventInstance<T>) -> &T {
 pub struct EventReader<'a, T: bevy_ecs::Resource> {
     last_event_count: Local<'a, (usize, PhantomData<T>)>,
     events: Res<'a, Events<T>>,
+}
+
+#[derive(SystemParam)]
+pub struct EventWriter<'a, T: bevy_ecs::Resource> {
+    inner: &'a mut EventWriterInner<T>,
+}
+
+pub struct EventWriterInner<T: bevy_ecs::Resource> {
+    buffer: Vec<T>,
+}
+
+impl<T: bevy_ecs::Resource> Default for EventWriterInner<T> {
+    fn default() -> Self {
+        Self { buffer: Vec::new() }
+    }
+}
+
+impl<'a, T: bevy_ecs::Resource> EventWriter<'a, T> {
+    pub fn send(&mut self, event: T) {
+        self.inner.buffer.push(event);
+    }
+}
+
+impl<T: bevy_ecs::Resource> Applyable for EventWriterInner<T> {
+    fn apply(&mut self, _world: &mut bevy_ecs::World, resources: &mut bevy_ecs::Resources) {
+        let mut events = resources.get_mut::<Events<T>>().unwrap_or_else(|| {
+            panic!(
+                "Events<{0}> not found in Resources! Maybe do `.add_event::<{0}>()`?",
+                std::any::type_name::<T>().to_string()
+            )
+        });
+        for event in self.buffer.drain(..) {
+            events.send(event);
+        }
+    }
+
+    fn init(&mut self, _world: &bevy_ecs::World, _resources: &mut bevy_ecs::Resources) {}
 }
 
 pub struct ManualEventReader<T> {
