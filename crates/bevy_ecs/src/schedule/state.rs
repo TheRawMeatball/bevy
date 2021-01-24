@@ -261,7 +261,11 @@ impl<T: Clone> State<T> {
 
 #[allow(clippy::mem_discriminant_non_enum)]
 mod alternate {
-    use std::{any::TypeId, mem::discriminant};
+    use std::{
+        any::TypeId,
+        marker::PhantomData,
+        mem::{discriminant, Discriminant},
+    };
 
     use crate::{
         ArchetypeComponent, ResMut, Resource, ShouldRun, State, System, SystemId, TypeAccess,
@@ -269,18 +273,15 @@ mod alternate {
 
     impl<T: Clone + Resource> State<T> {
         pub fn on_update(val: T) -> impl System<In = (), Out = ShouldRun> {
-            let d = discriminant(&val);
-            Wrapper::new(move |s| discriminant(&s.current) == d)
+            Wrapper::<T, OnUpdate>::new(discriminant(&val))
         }
 
         pub fn on_entry(val: T) -> impl System<In = (), Out = ShouldRun> {
-            let d = discriminant(&val);
-            Wrapper::new(move |s: &State<T>| s.next().map_or(false, |s| discriminant(s) == d))
+            Wrapper::<T, OnEntry>::new(discriminant(&val))
         }
 
         pub fn on_exit(val: T) -> impl System<In = (), Out = ShouldRun> {
-            let d = discriminant(&val);
-            Wrapper::new(move |s: &State<T>| s.next().is_some() && discriminant(&s.current) == d)
+            Wrapper::<T, OnExit>::new(discriminant(&val))
         }
 
         // TODO: Add a metod to AppBuilder that adds this system and the necessary resource
@@ -292,27 +293,52 @@ mod alternate {
         }
     }
 
-    impl<T: Clone + Resource> Wrapper<T> {
-        fn new(comparer: impl Fn(&State<T>) -> bool + Send + Sync + 'static) -> Self {
+    trait Comparer<T: Clone> {
+        fn compare(d: Discriminant<T>, s: &State<T>) -> bool;
+    }
+
+    struct OnUpdate;
+    impl<T: Clone> Comparer<T> for OnUpdate {
+        fn compare(d: Discriminant<T>, s: &State<T>) -> bool {
+            discriminant(&s.current) == d
+        }
+    }
+    struct OnEntry;
+    impl<T: Clone> Comparer<T> for OnEntry {
+        fn compare(d: Discriminant<T>, s: &State<T>) -> bool {
+            s.next().map_or(false, |n| discriminant(n) == d)
+        }
+    }
+    struct OnExit;
+    impl<T: Clone> Comparer<T> for OnExit {
+        fn compare(d: Discriminant<T>, s: &State<T>) -> bool {
+            s.next().is_some() && discriminant(&s.current) == d
+        }
+    }
+
+    impl<T: Clone + Resource, C: Comparer<T>> Wrapper<T, C> {
+        fn new(discriminant: Discriminant<T>) -> Self {
             let mut resource_access = TypeAccess::default();
             resource_access.add_read(std::any::TypeId::of::<State<T>>());
-            Wrapper {
-                comparer: Box::new(comparer),
+            Self {
+                discriminant,
                 resource_access,
                 id: SystemId::new(),
-                archetype_access: TypeAccess::default(),
+                archetype_access: Default::default(),
+                marker: Default::default(),
             }
         }
     }
 
-    struct Wrapper<T: Clone + Resource> {
-        comparer: Box<dyn Fn(&State<T>) -> bool + Send + Sync + 'static>,
+    struct Wrapper<T: Clone + Resource, C: Comparer<T>> {
+        discriminant: Discriminant<T>,
         resource_access: TypeAccess<TypeId>,
         id: SystemId,
         archetype_access: TypeAccess<ArchetypeComponent>,
+        marker: PhantomData<C>,
     }
 
-    impl<T: Clone + Resource> System for Wrapper<T> {
+    impl<T: Clone + Resource, C: Comparer<T> + Resource> System for Wrapper<T, C> {
         type In = ();
         type Out = ShouldRun;
 
@@ -345,11 +371,13 @@ mod alternate {
             _world: &crate::World,
             resources: &crate::Resources,
         ) -> Option<Self::Out> {
-            Some(if (self.comparer)(&*resources.get::<State<T>>().unwrap()) {
-                ShouldRun::Yes
-            } else {
-                ShouldRun::No
-            })
+            Some(
+                if C::compare(self.discriminant, &*resources.get::<State<T>>().unwrap()) {
+                    ShouldRun::Yes
+                } else {
+                    ShouldRun::No
+                },
+            )
         }
 
         fn update_access(&mut self, _world: &crate::World) {}
