@@ -5,6 +5,7 @@ pub mod startup_stage;
 
 mod app;
 mod app_builder;
+mod channel;
 mod event;
 mod plugin;
 mod plugin_group;
@@ -13,6 +14,7 @@ mod schedule_runner;
 pub use app::*;
 pub use app_builder::*;
 pub use bevy_derive::DynamicPlugin;
+pub use channel::*;
 pub use event::*;
 pub use plugin::*;
 pub use plugin_group::*;

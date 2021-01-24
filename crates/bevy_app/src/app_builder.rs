@@ -2,7 +2,7 @@ use crate::{
     app::{App, AppExit},
     event::Events,
     plugin::Plugin,
-    stage, startup_stage, PluginGroup, PluginGroupBuilder,
+    stage, startup_stage, Channels, PluginGroup, PluginGroupBuilder,
 };
 use bevy_ecs::{
     clear_trackers_system, ExclusiveSystemDescriptor, FromResources, IntoSystem,
@@ -251,6 +251,14 @@ impl AppBuilder {
     {
         self.add_resource(Events::<T>::default())
             .add_system_to_stage(stage::EVENT, Events::<T>::update_system.system())
+    }
+
+    pub fn add_channel_group<T>(&mut self) -> &mut Self
+    where
+        T: Send + Sync + 'static,
+    {
+        self.add_resource(Channels::<T>::default())
+            .add_system_to_stage(stage::EVENT, Channels::<T>::update_system.system())
     }
 
     /// Adds a resource to the current [App] and overwrites any resource previously added of the same type.
