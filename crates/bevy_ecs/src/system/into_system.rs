@@ -10,8 +10,9 @@ pub struct SystemState {
     pub(crate) id: SystemId,
     pub(crate) name: Cow<'static, str>,
     pub(crate) archetype_component_access: TypeAccess<ArchetypeComponent>,
+    pub(crate) component_access: TypeAccess<TypeId>,
     pub(crate) resource_access: TypeAccess<TypeId>,
-    pub(crate) is_thread_local: bool,
+    pub(crate) is_non_send: bool,
     pub(crate) local_resource_access: TypeAccess<TypeId>,
     pub(crate) query_archetype_component_accesses: Vec<TypeAccess<ArchetypeComponent>>,
     pub(crate) query_accesses: Vec<Vec<QueryAccess>>,
@@ -107,12 +108,16 @@ impl<Out: 'static> System for FuncSystem<Out> {
         &self.state.archetype_component_access
     }
 
+    fn component_access(&self) -> &TypeAccess<TypeId> {
+        &self.state.component_access
+    }
+
     fn resource_access(&self) -> &TypeAccess<std::any::TypeId> {
         &self.state.resource_access
     }
 
-    fn is_thread_local(&self) -> bool {
-        self.state.is_thread_local
+    fn is_non_send(&self) -> bool {
+        self.state.is_non_send
     }
 
     unsafe fn run_unsafe(
@@ -168,12 +173,16 @@ impl<In: 'static, Out: 'static> System for InputFuncSystem<In, Out> {
         &self.state.archetype_component_access
     }
 
+    fn component_access(&self) -> &TypeAccess<TypeId> {
+        &self.state.component_access
+    }
+
     fn resource_access(&self) -> &TypeAccess<std::any::TypeId> {
         &self.state.resource_access
     }
 
-    fn is_thread_local(&self) -> bool {
-        self.state.is_thread_local
+    fn is_non_send(&self) -> bool {
+        self.state.is_non_send
     }
 
     unsafe fn run_unsafe(
@@ -230,8 +239,9 @@ macro_rules! impl_into_system {
                     state: SystemState {
                         name: std::any::type_name::<Self>().into(),
                         archetype_component_access: TypeAccess::default(),
+                        component_access: TypeAccess::default(),
                         resource_access: TypeAccess::default(),
-                        is_thread_local: false,
+                        is_non_send: false,
                         local_resource_access: TypeAccess::default(),
                         id: SystemId::new(),
                         commands: Default::default(),
@@ -273,8 +283,9 @@ macro_rules! impl_into_system {
                     state: SystemState {
                         name: std::any::type_name::<Self>().into(),
                         archetype_component_access: TypeAccess::default(),
+                        component_access: TypeAccess::default(),
                         resource_access: TypeAccess::default(),
-                        is_thread_local: false,
+                        is_non_send: false,
                         local_resource_access: TypeAccess::default(),
                         id: SystemId::new(),
                         commands: Default::default(),
@@ -329,7 +340,8 @@ mod tests {
         clear_trackers_system,
         resource::{Res, ResMut, Resources},
         schedule::Schedule,
-        ChangedRes, Entity, Local, Or, Query, QuerySet, Stage, System, SystemStage, With, World,
+        ChangedRes, Entity, IntoExclusiveSystem, Local, Or, Query, QuerySet, Stage, System,
+        SystemStage, With, World,
     };
 
     #[derive(Debug, Eq, PartialEq, Default)]
@@ -449,7 +461,7 @@ mod tests {
         schedule.add_stage("update", update);
         schedule.add_stage(
             "clear_trackers",
-            SystemStage::single(clear_trackers_system.system()),
+            SystemStage::single(clear_trackers_system.exclusive_system()),
         );
 
         schedule.run(&mut world, &mut resources);
@@ -486,7 +498,7 @@ mod tests {
         schedule.add_stage("update", update);
         schedule.add_stage(
             "clear_trackers",
-            SystemStage::single(clear_trackers_system.system()),
+            SystemStage::single(clear_trackers_system.exclusive_system()),
         );
 
         schedule.run(&mut world, &mut resources);

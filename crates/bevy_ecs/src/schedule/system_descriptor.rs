@@ -1,35 +1,64 @@
-use std::ptr::NonNull;
-
-use crate::{BoxedSystem, ExclusiveSystemFn, System};
+use crate::{BoxedSystem, ExclusiveSystem, ExclusiveSystemCoerced, ExclusiveSystemFn, System};
 
 type Label = &'static str; // TODO
 
+pub enum SystemDescriptor {
+    Parallel(ParallelSystemDescriptor),
+    Exclusive(ExclusiveSystemDescriptor),
+}
+
+impl From<ParallelSystemDescriptor> for SystemDescriptor {
+    fn from(descriptor: ParallelSystemDescriptor) -> Self {
+        SystemDescriptor::Parallel(descriptor)
+    }
+}
+
+impl<S> From<S> for SystemDescriptor
+where
+    S: System<In = (), Out = ()>,
+{
+    fn from(system: S) -> Self {
+        new_parallel_descriptor(Box::new(system)).into()
+    }
+}
+
+impl From<BoxedSystem<(), ()>> for SystemDescriptor {
+    fn from(system: BoxedSystem<(), ()>) -> Self {
+        new_parallel_descriptor(system).into()
+    }
+}
+
+impl From<ExclusiveSystemDescriptor> for SystemDescriptor {
+    fn from(descriptor: ExclusiveSystemDescriptor) -> Self {
+        SystemDescriptor::Exclusive(descriptor)
+    }
+}
+
+impl From<ExclusiveSystemFn> for SystemDescriptor {
+    fn from(system: ExclusiveSystemFn) -> Self {
+        new_exclusive_descriptor(Box::new(system)).into()
+    }
+}
+
+impl From<ExclusiveSystemCoerced> for SystemDescriptor {
+    fn from(system: ExclusiveSystemCoerced) -> Self {
+        new_exclusive_descriptor(Box::new(system)).into()
+    }
+}
+
 pub struct ParallelSystemDescriptor {
-    system: NonNull<dyn System<In = (), Out = ()>>,
+    pub(crate) system: BoxedSystem<(), ()>,
     pub(crate) label: Option<Label>,
     pub(crate) before: Vec<Label>,
     pub(crate) after: Vec<Label>,
 }
 
-unsafe impl Send for ParallelSystemDescriptor {}
-unsafe impl Sync for ParallelSystemDescriptor {}
-
-impl ParallelSystemDescriptor {
-    pub(crate) fn system(&self) -> &dyn System<In = (), Out = ()> {
-        // SAFE: statically enforced shared access.
-        unsafe { self.system.as_ref() }
-    }
-
-    pub(crate) fn system_mut(&mut self) -> &mut dyn System<In = (), Out = ()> {
-        // SAFE: statically enforced exclusive access.
-        unsafe { self.system.as_mut() }
-    }
-
-    /// # Safety
-    /// Ensure no other borrows exist along with this one.
-    #[allow(clippy::mut_from_ref)]
-    pub(crate) unsafe fn system_mut_unsafe(&self) -> &mut dyn System<In = (), Out = ()> {
-        &mut *self.system.as_ptr()
+fn new_parallel_descriptor(system: BoxedSystem<(), ()>) -> ParallelSystemDescriptor {
+    ParallelSystemDescriptor {
+        system,
+        label: None,
+        before: Vec::new(),
+        after: Vec::new(),
     }
 }
 
@@ -55,15 +84,6 @@ impl ParallelSystemDescriptorCoercion for ParallelSystemDescriptor {
     fn after(mut self, label: Label) -> ParallelSystemDescriptor {
         self.after.push(label);
         self
-    }
-}
-
-fn new_parallel_descriptor(system: BoxedSystem<(), ()>) -> ParallelSystemDescriptor {
-    ParallelSystemDescriptor {
-        system: unsafe { NonNull::new_unchecked(Box::into_raw(system)) },
-        label: None,
-        before: Vec::new(),
-        after: Vec::new(),
     }
 }
 
@@ -98,21 +118,6 @@ impl ParallelSystemDescriptorCoercion for BoxedSystem<(), ()> {
     }
 }
 
-impl<S> From<S> for ParallelSystemDescriptor
-where
-    S: System<In = (), Out = ()>,
-{
-    fn from(system: S) -> Self {
-        new_parallel_descriptor(Box::new(system))
-    }
-}
-
-impl From<BoxedSystem<(), ()>> for ParallelSystemDescriptor {
-    fn from(system: BoxedSystem<(), ()>) -> Self {
-        new_parallel_descriptor(system)
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum InsertionPoint {
     AtStart,
@@ -121,11 +126,21 @@ pub(crate) enum InsertionPoint {
 }
 
 pub struct ExclusiveSystemDescriptor {
-    pub(crate) system: ExclusiveSystemFn,
+    pub(crate) system: Box<dyn ExclusiveSystem>,
     pub(crate) label: Option<Label>,
     pub(crate) before: Vec<Label>,
     pub(crate) after: Vec<Label>,
     pub(crate) insertion_point: InsertionPoint,
+}
+
+fn new_exclusive_descriptor(system: Box<dyn ExclusiveSystem>) -> ExclusiveSystemDescriptor {
+    ExclusiveSystemDescriptor {
+        system,
+        label: None,
+        before: Vec::new(),
+        after: Vec::new(),
+        insertion_point: InsertionPoint::AtStart,
+    }
 }
 
 pub trait ExclusiveSystemDescriptorCoercion {
@@ -174,47 +189,31 @@ impl ExclusiveSystemDescriptorCoercion for ExclusiveSystemDescriptor {
     }
 }
 
-fn new_exclusive_descriptor(system: ExclusiveSystemFn) -> ExclusiveSystemDescriptor {
-    ExclusiveSystemDescriptor {
-        system,
-        label: None,
-        before: Vec::new(),
-        after: Vec::new(),
-        insertion_point: InsertionPoint::AtStart,
-    }
-}
-
 impl<T> ExclusiveSystemDescriptorCoercion for T
 where
-    T: Into<ExclusiveSystemFn>,
+    T: ExclusiveSystem + 'static,
 {
     fn label(self, label: Label) -> ExclusiveSystemDescriptor {
-        new_exclusive_descriptor(self.into()).label(label)
+        new_exclusive_descriptor(Box::new(self)).label(label)
     }
 
     fn before(self, label: Label) -> ExclusiveSystemDescriptor {
-        new_exclusive_descriptor(self.into()).before(label)
+        new_exclusive_descriptor(Box::new(self)).before(label)
     }
 
     fn after(self, label: Label) -> ExclusiveSystemDescriptor {
-        new_exclusive_descriptor(self.into()).after(label)
+        new_exclusive_descriptor(Box::new(self)).after(label)
     }
 
     fn at_start(self) -> ExclusiveSystemDescriptor {
-        new_exclusive_descriptor(self.into()).at_start()
+        new_exclusive_descriptor(Box::new(self)).at_start()
     }
 
     fn before_commands(self) -> ExclusiveSystemDescriptor {
-        new_exclusive_descriptor(self.into()).before_commands()
+        new_exclusive_descriptor(Box::new(self)).before_commands()
     }
 
     fn at_end(self) -> ExclusiveSystemDescriptor {
-        new_exclusive_descriptor(self.into()).at_end()
-    }
-}
-
-impl From<ExclusiveSystemFn> for ExclusiveSystemDescriptor {
-    fn from(system: ExclusiveSystemFn) -> Self {
-        new_exclusive_descriptor(system)
+        new_exclusive_descriptor(Box::new(self)).at_end()
     }
 }
