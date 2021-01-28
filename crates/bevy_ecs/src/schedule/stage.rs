@@ -1,7 +1,7 @@
-use bevy_utils::HashMap;
+use bevy_utils::{HashMap, HashSet};
 use downcast_rs::{impl_downcast, Downcast};
 use fixedbitset::FixedBitSet;
-use std::{borrow::Cow, ptr::NonNull};
+use std::{borrow::Cow, collections::VecDeque, ptr::NonNull};
 
 use super::{
     ExclusiveSystemContainer, ParallelExecutor, ParallelSystemContainer, ParallelSystemExecutor,
@@ -31,6 +31,7 @@ type Label = &'static str; // TODO
 struct VirtualSystemSet {
     run_criteria: RunCriteria,
     should_run: ShouldRun,
+    parent: Option<usize>,
 }
 
 enum SystemKind {
@@ -67,6 +68,7 @@ impl SystemStage {
         let set = VirtualSystemSet {
             run_criteria: Default::default(),
             should_run: ShouldRun::Yes,
+            parent: None,
         };
         SystemStage {
             executor,
@@ -123,20 +125,32 @@ impl SystemStage {
     }
 
     pub fn add_system_set(&mut self, system_set: SystemSet) -> &mut Self {
+        self.add_system_set_with_parent(system_set, None);
+        self
+    }
+
+    // TODO consider exposing
+    fn add_system_set_with_parent(&mut self, system_set: SystemSet, parent: Option<usize>) {
         self.systems_modified = true;
         let SystemSet {
             run_criteria,
             mut descriptors,
+            children,
         } = system_set;
         let set = self.system_sets.len();
         self.system_sets.push(VirtualSystemSet {
             run_criteria,
             should_run: ShouldRun::No,
+            parent,
         });
+
+        for child_set in children.into_iter() {
+            self.add_system_set_with_parent(child_set, Some(set));
+        }
+
         for system in descriptors.drain(..) {
             self.add_system_to_set(system, set);
         }
-        self
     }
 
     pub fn add_system(&mut self, system: impl Into<SystemDescriptor>) -> &mut Self {
@@ -354,23 +368,54 @@ fn add_relations(
     }
 }
 
+fn process_run_criteria(
+    system_sets: &mut [VirtualSystemSet],
+    world: &mut World,
+    resources: &mut Resources,
+    has_any_work: &mut bool,
+    has_doable_work: &mut bool,
+) {
+    let mut evaluated = HashSet::default();
+    let mut system_sets: VecDeque<_> = system_sets.iter_mut().enumerate().collect();
+    loop {
+        let (index, system_set) = if let Some((i, set)) = system_sets.pop_front() {
+            (i, set)
+        } else {
+            break;
+        };
+        if let Some(parent) = system_set.parent {
+            if !evaluated.contains(&parent) {
+                system_sets.push_back((index, system_set));
+                continue;
+            }
+        }
+
+        let result = system_set.run_criteria.should_run(world, resources);
+        match result {
+            Yes | YesAndLoop => {
+                *has_doable_work = true;
+                *has_any_work = true;
+            }
+            NoAndLoop => *has_any_work = true,
+            No => (),
+        }
+        system_set.should_run = result;
+        evaluated.insert(index);
+    }
+}
+
 impl Stage for SystemStage {
     fn run(&mut self, world: &mut World, resources: &mut Resources) {
         // Evaluate sets' run criteria, initialize sets as needed, detect if any sets were changed.
         let mut has_any_work = false;
         let mut has_doable_work = false;
-        for system_set in self.system_sets.iter_mut() {
-            let result = system_set.run_criteria.should_run(world, resources);
-            match result {
-                Yes | YesAndLoop => {
-                    has_doable_work = true;
-                    has_any_work = true;
-                }
-                NoAndLoop => has_any_work = true,
-                No => (),
-            }
-            system_set.should_run = result;
-        }
+        process_run_criteria(
+            &mut self.system_sets,
+            world,
+            resources,
+            &mut has_any_work,
+            &mut has_doable_work,
+        );
         // TODO a real error message
         assert!(!has_any_work || has_doable_work);
         if !has_doable_work {
@@ -439,26 +484,13 @@ impl Stage for SystemStage {
             }
 
             // Reevaluate system sets' run criteria.
-            has_any_work = false;
-            has_doable_work = false;
-            for system_set in self.system_sets.iter_mut() {
-                match system_set.should_run {
-                    No => (),
-                    Yes => system_set.should_run = No,
-                    YesAndLoop | NoAndLoop => {
-                        let new_result = system_set.run_criteria.should_run(world, resources);
-                        match new_result {
-                            Yes | YesAndLoop => {
-                                has_doable_work = true;
-                                has_any_work = true;
-                            }
-                            NoAndLoop => has_any_work = true,
-                            No => (),
-                        }
-                        system_set.should_run = new_result;
-                    }
-                }
-            }
+            process_run_criteria(
+                &mut self.system_sets,
+                world,
+                resources,
+                &mut has_any_work,
+                &mut has_doable_work,
+            );
             // TODO a real error message
             assert!(!has_any_work || has_doable_work);
         }

@@ -3,6 +3,7 @@ use crate::{RunCriteria, ShouldRun, System, SystemDescriptor};
 pub struct SystemSet {
     pub(crate) run_criteria: RunCriteria,
     pub(crate) descriptors: Vec<SystemDescriptor>,
+    pub(crate) children: Vec<SystemSet>,
 }
 
 impl Default for SystemSet {
@@ -10,6 +11,7 @@ impl Default for SystemSet {
         SystemSet {
             run_criteria: Default::default(),
             descriptors: vec![],
+            children: vec![],
         }
     }
 }
@@ -39,6 +41,11 @@ impl SystemSet {
 
     pub fn add_system(&mut self, system: impl Into<SystemDescriptor>) -> &mut Self {
         self.descriptors.push(system.into());
+        self
+    }
+
+    pub fn add_child(&mut self, system_set: SystemSet) -> &mut Self {
+        self.children.push(system_set);
         self
     }
 }
