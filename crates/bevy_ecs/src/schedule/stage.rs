@@ -425,7 +425,7 @@ fn process_run_criteria(
     has_any_work: &mut bool,
     has_doable_work: &mut bool,
 ) {
-    let mut evaluated = HashSet::default();
+    let mut evaluated = FixedBitSet::with_capacity(system_sets.len());
     let mut system_sets: VecDeque<_> = system_sets.iter_mut().enumerate().rev().collect();
     loop {
         let (index, system_set) = if let Some((i, set)) = system_sets.pop_front() {
@@ -434,7 +434,7 @@ fn process_run_criteria(
             break;
         };
         if index != 0 {
-            if !evaluated.contains(&system_set.parent) {
+            if !evaluated.contains(system_set.parent) {
                 system_sets.push_back((index, system_set));
                 continue;
             }
