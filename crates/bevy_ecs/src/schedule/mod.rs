@@ -5,6 +5,7 @@ mod state;
 mod system_container;
 mod system_descriptor;
 mod system_set;
+mod state_set;
 
 pub use executor::*;
 pub use executor_parallel::*;
@@ -13,6 +14,7 @@ pub use state::*;
 pub use system_container::*;
 pub use system_descriptor::*;
 pub use system_set::*;
+pub use state_set::*;
 
 use crate::{
     ArchetypeComponent, BoxedSystem, IntoSystem, Resources, System, SystemId, TypeAccess, World,
