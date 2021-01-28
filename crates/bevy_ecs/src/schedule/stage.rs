@@ -1,7 +1,7 @@
 use bevy_utils::{HashMap, HashSet};
 use downcast_rs::{impl_downcast, Downcast};
 use fixedbitset::FixedBitSet;
-use std::{borrow::Cow, iter::FromIterator, collections::VecDeque, ptr::NonNull};
+use std::{borrow::Cow, collections::VecDeque, iter::FromIterator, ptr::NonNull};
 
 use super::{
     ExclusiveSystemContainer, ParallelExecutor, ParallelSystemContainer, ParallelSystemExecutor,
@@ -31,7 +31,7 @@ type Label = &'static str; // TODO
 struct VirtualSystemSet {
     run_criteria: RunCriteria,
     should_run: ShouldRun,
-    parent: Option<usize>,
+    parent: usize,
 }
 
 enum SystemKind {
@@ -68,7 +68,7 @@ impl SystemStage {
         let set = VirtualSystemSet {
             run_criteria: Default::default(),
             should_run: ShouldRun::Yes,
-            parent: None,
+            parent: 0,
         };
         SystemStage {
             executor,
@@ -125,12 +125,12 @@ impl SystemStage {
     }
 
     pub fn add_system_set(&mut self, system_set: SystemSet) -> &mut Self {
-        self.add_system_set_with_parent(system_set, None);
+        self.add_system_set_with_parent(system_set, 0);
         self
     }
 
     // TODO consider exposing
-    fn add_system_set_with_parent(&mut self, system_set: SystemSet, parent: Option<usize>) {
+    fn add_system_set_with_parent(&mut self, system_set: SystemSet, parent: usize) {
         self.systems_modified = true;
         let SystemSet {
             run_criteria,
@@ -145,7 +145,7 @@ impl SystemStage {
         });
 
         for child_set in children.into_iter() {
-            self.add_system_set_with_parent(child_set, Some(set));
+            self.add_system_set_with_parent(child_set, set);
         }
 
         for system in descriptors.drain(..) {
@@ -426,15 +426,15 @@ fn process_run_criteria(
     has_doable_work: &mut bool,
 ) {
     let mut evaluated = HashSet::default();
-    let mut system_sets: VecDeque<_> = system_sets.iter_mut().enumerate().collect();
+    let mut system_sets: VecDeque<_> = system_sets.iter_mut().enumerate().rev().collect();
     loop {
         let (index, system_set) = if let Some((i, set)) = system_sets.pop_front() {
             (i, set)
         } else {
             break;
         };
-        if let Some(parent) = system_set.parent {
-            if !evaluated.contains(&parent) {
+        if index != 0 {
+            if !evaluated.contains(&system_set.parent) {
                 system_sets.push_back((index, system_set));
                 continue;
             }
