@@ -1,7 +1,7 @@
 use bevy_utils::{HashMap, HashSet};
 use downcast_rs::{impl_downcast, Downcast};
 use fixedbitset::FixedBitSet;
-use std::{borrow::Cow, collections::VecDeque, iter::FromIterator, ptr::NonNull};
+use std::{borrow::Cow, iter::FromIterator, ptr::NonNull};
 
 use super::{
     ExclusiveSystemContainer, ParallelExecutor, ParallelSystemContainer, ParallelSystemExecutor,
@@ -32,6 +32,8 @@ struct VirtualSystemSet {
     run_criteria: RunCriteria,
     should_run: ShouldRun,
     parent: usize,
+    completed_child_count: usize,
+    waiting_on_children: bool,
 }
 
 enum SystemKind {
@@ -46,6 +48,7 @@ pub struct SystemStage {
     executor: Box<dyn ParallelSystemExecutor>,
     /// Groups of systems; each set has its own run criterion.
     system_sets: Vec<VirtualSystemSet>,
+    system_set_dependency_map: HashMap<usize, Vec<usize>>,
     /// Topologically sorted exclusive systems that want to be ran at the start of the stage.
     exclusive_at_start: Vec<ExclusiveSystemContainer>,
     /// Topologically sorted exclusive systems that want to be ran after parallel systems but
@@ -69,10 +72,13 @@ impl SystemStage {
             run_criteria: Default::default(),
             should_run: ShouldRun::Yes,
             parent: 0,
+            completed_child_count: 0,
+            waiting_on_children: false,
         };
         SystemStage {
             executor,
             system_sets: vec![set],
+            system_set_dependency_map: Default::default(),
             exclusive_at_start: Default::default(),
             exclusive_before_commands: Default::default(),
             exclusive_at_end: Default::default(),
@@ -138,10 +144,13 @@ impl SystemStage {
             children,
         } = system_set;
         let set = self.system_sets.len();
+        self.system_sets[parent].completed_child_count += 1;
         self.system_sets.push(VirtualSystemSet {
             run_criteria,
             should_run: ShouldRun::No,
             parent,
+            completed_child_count: 0,
+            waiting_on_children: false,
         });
 
         for child_set in children.into_iter() {
@@ -418,57 +427,19 @@ fn populate_relations(
     }
 }
 
-fn process_run_criteria(
-    system_sets: &mut [VirtualSystemSet],
-    world: &mut World,
-    resources: &mut Resources,
-    has_any_work: &mut bool,
-    has_doable_work: &mut bool,
-) {
-    let mut evaluated = FixedBitSet::with_capacity(system_sets.len());
-    let mut system_sets: VecDeque<_> = system_sets.iter_mut().enumerate().rev().collect();
-    loop {
-        let (index, system_set) = if let Some((i, set)) = system_sets.pop_front() {
-            (i, set)
-        } else {
-            break;
-        };
-        if index != 0 {
-            if !evaluated.contains(system_set.parent) {
-                system_sets.push_back((index, system_set));
-                continue;
-            }
-        }
-
-        let result = system_set.run_criteria.should_run(world, resources);
-        match result {
-            Yes | YesAndLoop => {
-                *has_doable_work = true;
-                *has_any_work = true;
-            }
-            NoAndLoop => *has_any_work = true,
-            No => (),
-        }
-        system_set.should_run = result;
-        evaluated.insert(index);
-    }
-}
-
 impl Stage for SystemStage {
     fn run(&mut self, world: &mut World, resources: &mut Resources) {
         // Evaluate sets' run criteria, initialize sets as needed, detect if any sets were changed.
-        let mut has_any_work = false;
-        let mut has_doable_work = false;
-        process_run_criteria(
+        eval_child_run_criteria(
             &mut self.system_sets,
+            0,
+            &self.system_set_dependency_map,
+            false,
             world,
             resources,
-            &mut has_any_work,
-            &mut has_doable_work,
         );
         // TODO a real error message
-        assert!(!has_any_work || has_doable_work);
-        if !has_doable_work {
+        if self.system_sets[0].should_run == No {
             return;
         }
 
@@ -487,12 +458,19 @@ impl Stage for SystemStage {
                     println!(" - {:?} and {:?}", system_a, system_b);
                 }
             }
+
+            for (i, set) in self.system_sets.iter().enumerate().skip(1) {
+                self.system_set_dependency_map
+                    .entry(set.parent)
+                    .or_default()
+                    .push(i);
+            }
         } else if self.executor_modified {
             self.executor.rebuild_cached_data(&mut self.parallel, world);
             self.executor_modified = false;
         }
 
-        while has_doable_work {
+        loop {
             // Run systems that want to be at the start of stage.
             for container in &mut self.exclusive_at_start {
                 if let Yes | YesAndLoop = self.system_sets[container.set].should_run {
@@ -503,9 +481,13 @@ impl Stage for SystemStage {
             // Run parallel systems using the executor.
             // TODO hard dependencies, nested sets, whatever... should be evaluated here.
             for container in &mut self.parallel {
-                match self.system_sets[container.set].should_run {
-                    Yes | YesAndLoop => container.should_run = true,
-                    No | NoAndLoop => container.should_run = false,
+                if self.system_sets[container.set].waiting_on_children {
+                    container.should_run = false;
+                } else {
+                    match self.system_sets[container.set].should_run {
+                        Yes | YesAndLoop => container.should_run = true,
+                        No | NoAndLoop => container.should_run = false,
+                    }
                 }
             }
             self.executor
@@ -533,15 +515,136 @@ impl Stage for SystemStage {
             }
 
             // Reevaluate system sets' run criteria.
-            process_run_criteria(
+            eval_child_run_criteria(
                 &mut self.system_sets,
+                0,
+                &self.system_set_dependency_map,
+                true,
                 world,
                 resources,
-                &mut has_any_work,
-                &mut has_doable_work,
             );
-            // TODO a real error message
-            assert!(!has_any_work || has_doable_work);
+            if self.system_sets[0].should_run == No {
+                return;
+            }
+        }
+    }
+}
+
+fn eval_child_run_criteria(
+    sets: &mut [VirtualSystemSet],
+    index: usize,
+    graph: &HashMap<usize, Vec<usize>>,
+    child_loop: bool,
+    world: &mut World,
+    resources: &mut Resources,
+) {
+    let children = graph.get(&index).map(|v| v.as_slice()).unwrap_or(&[]);
+    let parent = if index == 0 {
+        None
+    } else {
+        Some(sets[index].parent)
+    };
+    if sets[index].completed_child_count == children.len() {
+        // All children have evaluated to No, evaluate self
+        if child_loop {
+            sets[index].waiting_on_children = false;
+            match sets[index].should_run {
+                No => {}
+                Yes => {
+                    sets[index].should_run = No;
+                    if let Some(parent) = parent {
+                        sets[parent].completed_child_count += 1;
+                    }
+                }
+                YesAndLoop | NoAndLoop => {
+                    let result = sets[index].run_criteria.should_run(world, resources);
+                    sets[index].should_run = result;
+                    match result {
+                        No => {
+                            if let Some(parent) = parent {
+                                sets[parent].completed_child_count += 1;
+                            }
+                        }
+                        Yes | YesAndLoop => {
+                            sets[index].completed_child_count = 0;
+                            for child in children.iter().cloned() {
+                                eval_child_run_criteria(sets, child, graph, false, world, resources);
+                            }
+
+                            if let Some(parent) = parent {
+                                sets[parent].waiting_on_children = true;
+                            }
+                        }
+                        NoAndLoop => {
+                            if let Some(parent) = parent {
+                                sets[parent].waiting_on_children = true;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            let result = sets[index].run_criteria.should_run(world, resources);
+            sets[index].should_run = result;
+            match result {
+                No => {
+                    if let Some(parent) = parent {
+                        sets[parent].completed_child_count += 1;
+                    }
+                }
+                Yes | YesAndLoop => {
+                    sets[index].completed_child_count = 0;
+                    for child in children.iter().cloned() {
+                        eval_child_run_criteria(sets, child, graph, false, world, resources);
+                    }
+                }
+                NoAndLoop => {}
+            }
+        }
+    } else {
+        if let Some(parent) = parent {
+            sets[parent].waiting_on_children = true;
+        }
+
+        for child in children.iter().cloned() {
+            eval_child_run_criteria(sets, child, graph, true, world, resources);
+        }
+
+        if sets[index].completed_child_count == children.len() {
+            eval_child_run_criteria(sets, index, graph, true, world, resources)
+        }
+    }
+}
+
+// TODO: Remove later, this is just for debugging
+mod graph_print {
+    use bevy_utils::HashMap;
+
+    use crate::ShouldRun;
+
+    use super::VirtualSystemSet;
+
+    #[derive(Debug)]
+    pub struct Node {
+        should_run: ShouldRun,
+        index: usize,
+        children: Vec<Node>,
+        completed_child_count: usize,
+        waiting_on_children: bool,
+    }
+    pub(super) fn nodify(sets: &[VirtualSystemSet], graph: &HashMap<usize, Vec<usize>>, index: usize) -> Node {
+        Node {
+            index,
+            should_run: sets[index].should_run,
+            completed_child_count: sets[index].completed_child_count,
+            waiting_on_children: sets[index].waiting_on_children,
+            children: graph
+                .get(&index)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[])
+                .iter()
+                .map(|&i| nodify(sets, graph, i))
+                .collect(),
         }
     }
 }
