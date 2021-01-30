@@ -8,7 +8,7 @@ use bevy_utils::HashMap;
 
 use crate::{
     ArchetypeComponent, IntoSystem, ResMut, Resource, ShouldRun, System, SystemDescriptor,
-    SystemId, SystemSet, SystemStage, TypeAccess,
+    SystemId, SystemSet, TypeAccess,
 };
 
 #[derive(Debug)]
@@ -55,8 +55,23 @@ impl<T: Clone + Resource> SetState<T> {
         Wrapper::<T, OnExit>::new(d)
     }
 
-    pub fn schedule_operation(&mut self, val: ScheduledOperation<T>) -> Option<ScheduledOperation<T>> {
+    pub fn schedule_operation(
+        &mut self,
+        val: ScheduledOperation<T>,
+    ) -> Option<ScheduledOperation<T>> {
         self.scheduled.replace(val)
+    }
+
+    pub fn new(val: T) -> Self {
+        Self {
+            stack: vec![val],
+            transition: None,
+            scheduled: None,
+        }
+    }
+
+    pub fn current(&self) -> &T {
+        self.stack.last().unwrap()
     }
 }
 
@@ -177,13 +192,12 @@ impl<T: Clone + Resource, C: Comparer<T> + Resource> System for Wrapper<T, C> {
         _world: &crate::World,
         resources: &crate::Resources,
     ) -> Option<Self::Out> {
-        Some(
-            if C::compare(self.discriminant, &*resources.get::<SetState<T>>().unwrap()) {
-                ShouldRun::Yes
-            } else {
-                ShouldRun::No
-            },
-        )
+        let state = &*resources.get::<SetState<T>>().unwrap();
+        Some(if C::compare(self.discriminant, state) {
+            ShouldRun::Yes
+        } else {
+            ShouldRun::No
+        })
     }
 
     fn update_access(&mut self, _world: &crate::World) {}
@@ -279,8 +293,10 @@ impl<T: Clone + Resource> StateSetBuilder<T> {
         self
     }
 
-    pub fn finalize(self, stage: &mut SystemStage) {
-        fn root_run_criteria<T: Clone + Resource>(mut state: ResMut<SetState<T>>) -> ShouldRun {
+    pub fn finalize(self) -> SystemSet {
+        fn root_run_criteria<T: Clone + Resource>(
+            mut state: ResMut<SetState<T>>,
+        ) -> ShouldRun {
             match state.scheduled.take() {
                 Some(ScheduledOperation::Next(next)) => {
                     if state.stack.len() == 1 {
@@ -321,8 +337,6 @@ impl<T: Clone + Resource> StateSetBuilder<T> {
                     Some(StateTransition::ExitingToResume(p, n)) => {
                         state.transition = Some(StateTransition::Resuming(p, n));
                     }
-                    Some(StateTransition::Entering(_, _))
-                    | Some(StateTransition::Resuming(_, _)) => {}
                     _ => return ShouldRun::Yes,
                 },
             };
@@ -346,6 +360,6 @@ impl<T: Clone + Resource> StateSetBuilder<T> {
             root_set.add_child(set.with_run_criteria(SetState::<T>::on_resume(val)));
         }
 
-        stage.add_system_set(root_set);
+        root_set
     }
 }
