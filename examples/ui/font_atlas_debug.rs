@@ -98,7 +98,6 @@ fn setup(commands: &mut Commands, asset_server: Res<AssetServer>, mut state: Res
             },
             ..Default::default()
         },
-
         ..Default::default()
     });
 }

@@ -166,16 +166,17 @@ fn setup(
                                         })
                                         .with_children(|parent| {
                                             parent.spawn(TextBundle {
-                                                text: Text {
-                                                    font: asset_server
-                                                        .load("fonts/FiraSans-Bold.ttf"),
-                                                    value: "Dynamic layout!".into(),
-                                                    style: TextStyle {
+                                                text: Text::with_section(
+                                                    "Dynamic layout!",
+                                                    TextStyle {
                                                         font_size: 20.,
                                                         color: Color::WHITE,
+                                                        font: asset_server
+                                                            .load("fonts/FiraSans-Bold.ttf"),
                                                         ..Default::default()
                                                     },
-                                                },
+                                                    Default::default(),
+                                                ),
                                                 anchor_layout: AnchorLayout {
                                                     constraint: Constraint::Independent {
                                                         x: AxisConstraint::FromContentSize(
@@ -213,16 +214,17 @@ fn setup(
                                         })
                                         .with_children(|parent| {
                                             parent.spawn(TextBundle {
-                                                text: Text {
-                                                    font: asset_server
-                                                        .load("fonts/FiraSans-Bold.ttf"),
-                                                    value: "This is a longer string!".into(),
-                                                    style: TextStyle {
+                                                text: Text::with_section(
+                                                    "This is a longer string!",
+                                                    TextStyle {
                                                         font_size: 20.,
                                                         color: Color::WHITE,
+                                                        font: asset_server
+                                                            .load("fonts/FiraSans-Bold.ttf"),
                                                         ..Default::default()
                                                     },
-                                                },
+                                                    Default::default(),
+                                                ),
                                                 anchor_layout: AnchorLayout {
                                                     constraint: Constraint::Independent {
                                                         x: AxisConstraint::FromContentSize(

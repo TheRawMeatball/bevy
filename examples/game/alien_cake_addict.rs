@@ -161,12 +161,11 @@ fn setup(commands: &mut Commands, asset_server: Res<AssetServer>, mut game: ResM
             },
             Default::default(),
         ),
-        style: Style {
-            position_type: PositionType::Absolute,
-            position: Rect {
-                top: Val::Px(5.0),
-                left: Val::Px(5.0),
-                ..Default::default()
+        anchor_layout: AnchorLayout {
+            anchors: Anchors::TOP_LEFT,
+            constraint: Constraint::Independent {
+                x: AxisConstraint::FromContentSize(Alignment::DirectMargin(5.)),
+                y: AxisConstraint::FromContentSize(Alignment::ReverseMargin(5.)),
             },
             ..Default::default()
         },
@@ -354,31 +353,25 @@ fn display_score(
     commands: &mut Commands,
     asset_server: Res<AssetServer>,
     game: Res<Game>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    commands
-        .spawn(NodeBundle {
-            style: Style {
-                margin: Rect::all(Val::Auto),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..Default::default()
+    commands.spawn(TextBundle {
+        anchor_layout: AnchorLayout {
+            anchors: Anchors::CENTER,
+            constraint: Constraint::Independent {
+                x: AxisConstraint::FromContentSize(Alignment::Offset(0.)),
+                y: AxisConstraint::FromContentSize(Alignment::Offset(0.)),
             },
-            material: materials.add(Color::NONE.into()),
             ..Default::default()
-        })
-        .with_children(|parent| {
-            parent.spawn(TextBundle {
-                text: Text::with_section(
-                    format!("Cake eaten: {}", game.cake_eaten),
-                    TextStyle {
-                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                        font_size: 80.0,
-                        color: Color::rgb(0.5, 0.5, 1.0),
-                    },
-                    Default::default(),
-                ),
-                ..Default::default()
-            });
-        });
+        },
+        text: Text::with_section(
+            format!("Cake eaten: {}", game.cake_eaten),
+            TextStyle {
+                font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                font_size: 80.0,
+                color: Color::rgb(0.5, 0.5, 1.0),
+            },
+            Default::default(),
+        ),
+        ..Default::default()
+    });
 }
