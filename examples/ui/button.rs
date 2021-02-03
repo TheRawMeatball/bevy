@@ -39,15 +39,15 @@ fn button_system(
         let mut text = text_query.get_mut(children[0]).unwrap();
         match *interaction {
             Interaction::Clicked => {
-                text.value = "Press".to_string();
+                text.sections[0].value = "Press".to_string();
                 *material = button_materials.pressed.clone();
             }
             Interaction::Hovered => {
-                text.value = "Hover".to_string();
+                text.sections[0].value = "Hover".to_string();
                 *material = button_materials.hovered.clone();
             }
             Interaction::None => {
-                text.value = "Button".to_string();
+                text.sections[0].value = "Button".to_string();
                 *material = button_materials.normal.clone();
             }
         }
@@ -61,7 +61,7 @@ fn setup(
 ) {
     commands
         // ui camera
-        .spawn(CameraUiBundle::default())
+        .spawn(UiCameraBundle::default())
         .spawn(ButtonBundle {
             anchor_layout: AnchorLayout {
                 anchors: Anchors::CENTER,
@@ -76,15 +76,15 @@ fn setup(
         })
         .with_children(|parent| {
             parent.spawn(TextBundle {
-                text: Text {
-                    value: "Button".to_string(),
-                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                    style: TextStyle {
+                text: Text::with_section(
+                    "Button",
+                    TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
                         font_size: 40.0,
                         color: Color::rgb(0.9, 0.9, 0.9),
-                        ..Default::default()
                     },
-                },
+                    Default::default(),
+                ),
                 anchor_layout: AnchorLayout {
                     anchors: Anchors::CENTER,
                     constraint: Constraint::Independent {
@@ -93,6 +93,7 @@ fn setup(
                     },
                     ..Default::default()
                 },
+
                 ..Default::default()
             });
         });

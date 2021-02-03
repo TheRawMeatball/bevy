@@ -3,7 +3,7 @@ use bevy::prelude::*;
 /// This example illustrates how to customize the default window settings
 fn main() {
     App::build()
-        .add_resource(WindowDescriptor {
+        .insert_resource(WindowDescriptor {
             width: 500.,
             height: 300.,
             ..Default::default()
@@ -22,7 +22,8 @@ fn setup(
 ) {
     commands
         // ui camera
-        .spawn(CameraUiBundle::default())
+        .spawn(UiCameraBundle::default())
+        // root node
         .spawn(NodeBundle {
             anchor_layout: AnchorLayout {
                 anchors: Anchors::LEFT_FULL,
@@ -45,15 +46,15 @@ fn setup(
                     },
                     ..Default::default()
                 },
-                text: Text {
-                    value: "Example text".to_string(),
-                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                    style: TextStyle {
+                text: Text::with_section(
+                    "Example text",
+                    TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
                         font_size: 30.0,
                         color: Color::WHITE,
-                        ..Default::default()
                     },
-                },
+                    Default::default(),
+                ),
                 ..Default::default()
             });
         });

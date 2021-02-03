@@ -16,7 +16,7 @@ fn setup(
     let transparent = materials.add(Color::NONE.into());
     commands
         // ui camera
-        .spawn(CameraUiBundle::default())
+        .spawn(UiCameraBundle::default())
         // root node
         .spawn(NodeBundle {
             anchor_layout: AnchorLayout {
@@ -69,15 +69,15 @@ fn setup(
                                     },
                                     ..Default::default()
                                 },
-                                text: Text {
-                                    value: "Text Example".to_string(),
-                                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                                    style: TextStyle {
+                                text: Text::with_section(
+                                    "Text Example",
+                                    TextStyle {
+                                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
                                         font_size: 30.0,
                                         color: Color::WHITE,
-                                        ..Default::default()
                                     },
-                                },
+                                    Default::default(),
+                                ),
                                 ..Default::default()
                             });
                         });
