@@ -111,11 +111,10 @@ fn setup(
                                     x: AxisConstraint::DoubleMargin(10., 10.),
                                     y: AxisConstraint::DoubleMargin(10., 10.),
                                 },
-                                children_spread: Some(SpreadConstraint {
+                                children_spread: SpreadConstraint::Directed {
                                     direction: Direction::Down,
                                     margin: 10.,
-                                    ..Default::default()
-                                }),
+                                },
                                 ..Default::default()
                             },
                             material: transparent.clone(),
@@ -131,11 +130,10 @@ fn setup(
                                             min_size: ConstraintSize::FromContent,
                                             ..Default::default()
                                         }),
-                                        children_spread: Some(SpreadConstraint {
+                                        children_spread: SpreadConstraint::Directed {
                                             direction: Direction::Right,
                                             margin: 5.,
-                                            ..Default::default()
-                                        }),
+                                        },
                                         padding: Rect::all(5.),
                                         ..Default::default()
                                     },

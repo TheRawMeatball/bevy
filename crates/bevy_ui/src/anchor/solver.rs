@@ -51,7 +51,7 @@ pub(crate) fn solve(
                 )
             };
             let ts = *target_size;
-            if solve_layout.children_spread.is_some() {
+            if !solve_layout.children_spread.is_none() {
                 if children_flags.unwrap().changed() {
                     solve_self(mutables);
                     return;
@@ -151,141 +151,144 @@ pub(crate) fn solve(
 
     if let Some(children) = children {
         let ts = *target_size;
-        if let Some(spread_constraint) = &solve_layout.children_spread {
-            let child_nodes = children.iter().map(|c| {
-                (
-                    nodes
-                        .get_component::<AnchorLayout>(*c)
-                        .unwrap()
-                        .child_constraint
-                        .as_ref()
-                        .unwrap(),
+        match &solve_layout.children_spread {
+            SpreadConstraint::None => {
+                for child in children.iter() {
+                    solve(*child, ts, solve_layout.padding, false, nodes, mutables);
+                }
+            }
+            SpreadConstraint::Directed { direction, margin } => {
+                let child_nodes = children.iter().map(|c| {
+                    (
+                        nodes
+                            .get_component::<AnchorLayout>(*c)
+                            .unwrap()
+                            .child_constraint
+                            .as_ref()
+                            .unwrap(),
+                        {
+                            let size = nodes.get_component::<MinSize>(*c).unwrap().size;
+                            match direction {
+                                Direction::Left | Direction::Right => size.x,
+                                Direction::Up | Direction::Down => size.y,
+                            }
+                        },
+                        c,
+                    )
+                });
+
+                let ts = ts
+                    - Vec2::new(
+                        solve_layout.padding.left + solve_layout.padding.right,
+                        solve_layout.padding.bottom + solve_layout.padding.top,
+                    );
+
+                let mut free_length = match direction {
+                    Direction::Left | Direction::Right => ts.x,
+                    Direction::Up | Direction::Down => ts.y,
+                } - (children.iter().count() - 1) as f32 * margin;
+
+                let mut undef = vec![];
+                let mut undef_weight_sum = 0.;
+
+                let mut locked = BTreeMap::<usize, (&Entity, f32)>::new();
+
+                for (i, c) in child_nodes.enumerate() {
+                    undef_weight_sum += c.0.weight;
+                    undef.push((
+                        i,
+                        c.0.weight,
+                        c.0.min_size.unwrap_or_else(|| c.1),
+                        c.0.max_size.unwrap_or_else(|| c.1),
+                        c.2,
+                    ));
+                }
+
+                loop {
+                    let mut dirty = BTreeMap::<_, Vec<_>>::new();
+                    let length_per_weight = free_length / undef_weight_sum;
+                    let mut delta = 0.;
+
                     {
-                        let size = nodes.get_component::<MinSize>(*c).unwrap().size;
-                        match spread_constraint.direction {
-                            Direction::Left | Direction::Right => size.x,
-                            Direction::Up | Direction::Down => size.y,
-                        }
-                    },
-                    c,
-                )
-            });
-
-            let ts = ts
-                - Vec2::new(
-                    solve_layout.padding.left + solve_layout.padding.right,
-                    solve_layout.padding.bottom + solve_layout.padding.top,
-                );
-
-            let mut free_length = match spread_constraint.direction {
-                Direction::Left | Direction::Right => ts.x,
-                Direction::Up | Direction::Down => ts.y,
-            } - (children.iter().count() - 1) as f32
-                * spread_constraint.margin;
-
-            let mut undef = vec![];
-            let mut undef_weight_sum = 0.;
-
-            let mut locked = BTreeMap::<usize, (&Entity, f32)>::new();
-
-            for (i, c) in child_nodes.enumerate() {
-                undef_weight_sum += c.0.weight;
-                undef.push((
-                    i,
-                    c.0.weight,
-                    c.0.min_size.unwrap_or_else(|| c.1),
-                    c.0.max_size.unwrap_or_else(|| c.1),
-                    c.2,
-                ));
-            }
-
-            loop {
-                let mut dirty = BTreeMap::<_, Vec<_>>::new();
-                let length_per_weight = free_length / undef_weight_sum;
-                let mut delta = 0.;
-
-                {
-                    let mut i = 0;
-                    while i != undef.len() {
-                        let (_, weight, min, max, _) = undef[i];
-                        let len = length_per_weight * weight;
-                        if !(min..max).contains(&len) {
-                            let clamped = len.clamp(min, max);
-                            delta += clamped - len;
-                            let entry = dirty.entry(FloatOrd(clamped - len));
-                            entry.or_default().push((undef.swap_remove(i), clamped));
-                        } else {
-                            i += 1;
+                        let mut i = 0;
+                        while i != undef.len() {
+                            let (_, weight, min, max, _) = undef[i];
+                            let len = length_per_weight * weight;
+                            if !(min..max).contains(&len) {
+                                let clamped = len.clamp(min, max);
+                                delta += clamped - len;
+                                let entry = dirty.entry(FloatOrd(clamped - len));
+                                entry.or_default().push((undef.swap_remove(i), clamped));
+                            } else {
+                                i += 1;
+                            }
                         }
                     }
-                }
 
-                if dirty.is_empty() {
-                    for (i, weight, .., entity) in undef.iter() {
-                        let len = length_per_weight * weight;
-                        locked.insert(*i, (entity, len));
-                    }
-                    break;
-                } else {
-                    let key = if delta > 0. {
-                        *dirty.keys().next_back().unwrap()
+                    if dirty.is_empty() {
+                        for (i, weight, .., entity) in undef.iter() {
+                            let len = length_per_weight * weight;
+                            locked.insert(*i, (entity, len));
+                        }
+                        break;
                     } else {
-                        *dirty.keys().next().unwrap()
-                    };
-                    let ((i, weight, .., entity), clamped) = dirty.entry(key).or_default().pop().unwrap();
-                    locked.insert(i, (entity, clamped));
-                    free_length -= clamped;
-                    undef_weight_sum -= weight;
-                    for (v, _) in dirty.into_iter().map(|v| v.1).flatten() {
-                        undef.push(v);
+                        let key = if delta > 0. {
+                            *dirty.keys().next_back().unwrap()
+                        } else {
+                            *dirty.keys().next().unwrap()
+                        };
+                        let ((i, weight, .., entity), clamped) =
+                            dirty.entry(key).or_default().pop().unwrap();
+                        locked.insert(i, (entity, clamped));
+                        free_length -= clamped;
+                        undef_weight_sum -= weight;
+                        for (v, _) in dirty.into_iter().map(|v| v.1).flatten() {
+                            undef.push(v);
+                        }
                     }
                 }
-            }
 
-            let (calc_pos, calc_size): (fn(f32, f32, Vec2) -> Vec2, fn(f32, Vec2) -> Vec2) =
-                match spread_constraint.direction {
-                    Direction::Up => (
-                        |size, offset, ts| Vec2::new(0., offset + size / 2. - ts.y / 2.),
-                        |size, ts| Vec2::new(ts.x, size),
-                    ),
-                    Direction::Down => (
-                        |size, offset, ts| Vec2::new(0., ts.y / 2. - offset - size / 2.),
-                        |size, ts| Vec2::new(ts.x, size),
-                    ),
-                    Direction::Left => (
-                        |size, offset, ts| Vec2::new(ts.x / 2. - offset - size / 2., 0.),
-                        |size, ts| Vec2::new(size, ts.y),
-                    ),
-                    Direction::Right => (
-                        |size, offset, ts| Vec2::new(offset + size / 2. - ts.x / 2., 0.),
-                        |size, ts| Vec2::new(size, ts.y),
-                    ),
-                };
+                let (calc_pos, calc_size): (fn(f32, f32, Vec2) -> Vec2, fn(f32, Vec2) -> Vec2) =
+                    match direction {
+                        Direction::Up => (
+                            |size, offset, ts| Vec2::new(0., offset + size / 2. - ts.y / 2.),
+                            |size, ts| Vec2::new(ts.x, size),
+                        ),
+                        Direction::Down => (
+                            |size, offset, ts| Vec2::new(0., ts.y / 2. - offset - size / 2.),
+                            |size, ts| Vec2::new(ts.x, size),
+                        ),
+                        Direction::Left => (
+                            |size, offset, ts| Vec2::new(ts.x / 2. - offset - size / 2., 0.),
+                            |size, ts| Vec2::new(size, ts.y),
+                        ),
+                        Direction::Right => (
+                            |size, offset, ts| Vec2::new(offset + size / 2. - ts.x / 2., 0.),
+                            |size, ts| Vec2::new(size, ts.y),
+                        ),
+                    };
 
-            let mut offset = 0.;
-            let mut cache = vec![];
+                let mut offset = 0.;
+                let mut cache = vec![];
 
-            let padding_offset = Vec3::new(
-                solve_layout.padding.bottom - solve_layout.padding.top,
-                solve_layout.padding.left - solve_layout.padding.right,
-                0.,
-            ) / 2.;
+                let padding_offset = Vec3::new(
+                    solve_layout.padding.bottom - solve_layout.padding.top,
+                    solve_layout.padding.left - solve_layout.padding.right,
+                    0.,
+                ) / 2.;
 
-            for &(&entity, size) in locked.values() {
-                let mut transform = mutables.get_component_mut::<Transform>(entity).unwrap();
-                transform.translation = calc_pos(size, offset, ts).extend(0.) + padding_offset;
-                offset += size + spread_constraint.margin;
-                let size = calc_size(size, ts);
-                cache.push(size);
-                solve(entity, size, Rect::all(0.), false, nodes, mutables);
-            }
-            let mut target_cache = mutables
-                .get_component_mut::<LayoutCache>(solve_entity)
-                .unwrap();
-            target_cache.children_sizes = Some(cache);
-        } else {
-            for child in children.iter() {
-                solve(*child, ts, solve_layout.padding, false, nodes, mutables);
+                for &(&entity, size) in locked.values() {
+                    let mut transform = mutables.get_component_mut::<Transform>(entity).unwrap();
+                    transform.translation = calc_pos(size, offset, ts).extend(0.) + padding_offset;
+                    offset += size + margin;
+                    let size = calc_size(size, ts);
+                    cache.push(size);
+                    solve(entity, size, Rect::all(0.), false, nodes, mutables);
+                }
+                let mut target_cache = mutables
+                    .get_component_mut::<LayoutCache>(solve_entity)
+                    .unwrap();
+                target_cache.children_sizes = Some(cache);
             }
         }
     }

@@ -4,7 +4,8 @@ use bevy_text::CalculatedSize;
 use bevy_transform::components::Children;
 
 use crate::{
-    Alignment, AnchorLayout, Aspect, AxisConstraint, Constraint, ConstraintSize, Direction, MinSize,
+    Alignment, AnchorLayout, Aspect, AxisConstraint, Constraint, ConstraintSize, Direction,
+    MinSize, SpreadConstraint,
 };
 
 pub fn solve(
@@ -19,50 +20,51 @@ pub fn solve(
         .unwrap_or_else(Vec2::zero);
 
     let mut internal_size: Vec2 = if let Some(children) = children {
-        if let Some(sc) = &layout.children_spread {
-            let (mut internal, count) =
-                children
-                    .iter()
-                    .fold((Vec2::zero(), 0), |(mut state, count), &c| {
-                        let (node, _, _) = nodes.get(c).unwrap();
-                        let internal_size = solve(c, nodes, mutable);
-                        let cc = node.child_constraint.as_ref().unwrap();
-                        match sc.direction {
-                            Direction::Up | Direction::Down => {
-                                let aligned = match cc.min_size {
-                                    ConstraintSize::Pixels(v) => v,
-                                    ConstraintSize::FromContent => internal_size.y,
-                                };
-                                let perp = internal_size.x;
-                                state.x = state.x.max(perp);
-                                state.y += aligned;
-                            }
-                            Direction::Left | Direction::Right => {
-                                let aligned = match cc.min_size {
-                                    ConstraintSize::Pixels(v) => v,
-                                    ConstraintSize::FromContent => internal_size.x,
-                                };
-                                let perp = internal_size.y;
-                                state.x += aligned;
-                                state.y = state.y.max(perp);
-                            }
-                        };
-                        (state, count + 1)
-                    });
-
-            let margins = (count - 1).max(0) as f32 * sc.margin;
-            match sc.direction {
-                Direction::Left | Direction::Right => internal.x += margins,
-                Direction::Up | Direction::Down => internal.y += margins,
-            }
-            internal.max(inherent_size)
-        } else {
-            children.iter().fold(inherent_size, |mut state, &c| {
+        match &layout.children_spread {
+            SpreadConstraint::None => children.iter().fold(inherent_size, |mut state, &c| {
                 let c = solve(c, nodes, mutable);
                 state.x = state.x.max(c.x);
                 state.y = state.y.max(c.y);
                 state
-            })
+            }),
+            SpreadConstraint::Directed { margin, direction } => {
+                let (mut internal, count) =
+                    children
+                        .iter()
+                        .fold((Vec2::zero(), 0), |(mut state, count), &c| {
+                            let (node, _, _) = nodes.get(c).unwrap();
+                            let internal_size = solve(c, nodes, mutable);
+                            let cc = node.child_constraint.as_ref().unwrap();
+                            match direction {
+                                Direction::Up | Direction::Down => {
+                                    let aligned = match cc.min_size {
+                                        ConstraintSize::Pixels(v) => v,
+                                        ConstraintSize::FromContent => internal_size.y,
+                                    };
+                                    let perp = internal_size.x;
+                                    state.x = state.x.max(perp);
+                                    state.y += aligned;
+                                }
+                                Direction::Left | Direction::Right => {
+                                    let aligned = match cc.min_size {
+                                        ConstraintSize::Pixels(v) => v,
+                                        ConstraintSize::FromContent => internal_size.x,
+                                    };
+                                    let perp = internal_size.y;
+                                    state.x += aligned;
+                                    state.y = state.y.max(perp);
+                                }
+                            };
+                            (state, count + 1)
+                        });
+
+                let margins = (count - 1).max(0) as f32 * margin;
+                match direction {
+                    Direction::Left | Direction::Right => internal.x += margins,
+                    Direction::Up | Direction::Down => internal.y += margins,
+                }
+                internal.max(inherent_size)
+            }
         }
     } else {
         inherent_size

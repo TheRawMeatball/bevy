@@ -6,7 +6,7 @@ pub struct AnchorLayout {
     pub anchors: Anchors,
     pub constraint: Constraint,
     pub padding: Rect<f32>,
-    pub children_spread: Option<SpreadConstraint>,
+    pub children_spread: SpreadConstraint,
     pub child_constraint: Option<ChildConstraint>,
 }
 
@@ -84,11 +84,26 @@ impl Default for ChildConstraint {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct SpreadConstraint {
-    pub margin: f32,
-    pub direction: Direction,
-    pub __cache: Vec<Vec2>,
+#[derive(Clone, Debug)]
+pub enum SpreadConstraint {
+    None,
+    // TODO: align this with a well-defined layout algorithm
+    Directed { margin: f32, direction: Direction },
+    // TODO: Implement these!
+    // Wrap { margin: f32, direction: Direction },
+    // Grid { width: f32, height: f32 },
+}
+
+impl Default for SpreadConstraint {
+    fn default() -> Self {
+        SpreadConstraint::None
+    }
+}
+
+impl SpreadConstraint {
+    pub fn is_none(&self) -> bool {
+        matches!(self, SpreadConstraint::None)
+    }
 }
 
 #[derive(Clone, Debug)]
