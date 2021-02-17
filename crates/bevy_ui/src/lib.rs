@@ -40,11 +40,11 @@ impl Plugin for UiPlugin {
         )
         .add_system_to_stage(bevy_app::stage::PRE_UPDATE, ui_focus_system.system())
         // add these stages to front because these must run before transform update systems
-        .add_system_to_stage(stage::UI, widget::text_system.system().before("solve_min"))
-        .add_system_to_stage(stage::UI, widget::image_node_system.system().before("solve_min"))
-        .add_system_to_stage(stage::UI, ui_z_system.system())
+        .add_system_to_stage(stage::UI, widget::text_system.system().after("full_solve"))
+        .add_system_to_stage(stage::UI, widget::image_node_system.system().after("full_solve"))
+        .add_system_to_stage(stage::UI, ui_z_system.system().after("full_solve"))
         .add_system_to_stage(stage::UI, solve_min_system.system().label("solve_min"))
-        .add_system_to_stage(stage::UI, anchor_node_system.system().after("solve_min"))
+        .add_system_to_stage(stage::UI, anchor_node_system.system().label("full_solve").after("solve_min"))
         .add_system_to_stage(bevy_render::stage::DRAW, widget::draw_text_system.system());
 
         let resources = app.resources();
