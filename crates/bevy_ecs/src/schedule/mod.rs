@@ -2,6 +2,7 @@ mod executor;
 mod executor_parallel;
 mod label;
 mod stage;
+//mod stageless;
 mod state;
 mod system_container;
 mod system_descriptor;
@@ -77,7 +78,7 @@ impl Schedule {
         self
     }
 
-    pub fn add_stage<S: Stage>(&mut self, label: impl Into<StageLabel>, stage: S) -> &mut Self {
+    pub fn add_stage<S: Stage>(&mut self, label: impl StageLabel, stage: S) -> &mut Self {
         let label: Box<dyn StageLabel> = Box::new(label);
         self.stage_order.push(label.clone());
         let prev = self.stages.insert(label.clone(), Box::new(stage));
@@ -93,7 +94,7 @@ impl Schedule {
         label: impl StageLabel,
         stage: S,
     ) -> &mut Self {
-        let label: Box<dyn StageLabel> = Box::new(name);
+        let label: Box<dyn StageLabel> = Box::new(label);
         let target = &target as &dyn StageLabel;
         let target_index = self
             .stage_order
@@ -117,13 +118,13 @@ impl Schedule {
         label: impl StageLabel,
         stage: S,
     ) -> &mut Self {
-        let label: Box<dyn StageLabel> = Box::new(name);
+        let label: Box<dyn StageLabel> = Box::new(label);
         let target = &target as &dyn StageLabel;
         let target_index = self
             .stage_order
             .iter()
             .enumerate()
-            .find(|(_i, stage_name)| &***stage_label == target)
+            .find(|(_i, stage_label)| &***stage_label == target)
             .map(|(i, _)| i)
             .unwrap_or_else(|| panic!("Target stage does not exist: {:?}.", target));
 
