@@ -30,28 +30,28 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    pub fn with_stage<S: Stage>(mut self, name: impl StageLabel, stage: S) -> Self {
-        self.add_stage(name, stage);
+    pub fn with_stage<S: Stage>(mut self, label: impl StageLabel, stage: S) -> Self {
+        self.add_stage(label, stage);
         self
     }
 
     pub fn with_stage_after<S: Stage>(
         mut self,
         target: impl StageLabel,
-        name: impl StageLabel,
+        label: impl StageLabel,
         stage: S,
     ) -> Self {
-        self.add_stage_after(target, name, stage);
+        self.add_stage_after(target, label, stage);
         self
     }
 
     pub fn with_stage_before<S: Stage>(
         mut self,
         target: impl StageLabel,
-        name: impl StageLabel,
+        label: impl StageLabel,
         stage: S,
     ) -> Self {
-        self.add_stage_before(target, name, stage);
+        self.add_stage_before(target, label, stage);
         self
     }
 
@@ -62,10 +62,10 @@ impl Schedule {
 
     pub fn with_system_in_stage(
         mut self,
-        stage_name: impl StageLabel,
+        stage_label: impl StageLabel,
         system: impl Into<SystemDescriptor>,
     ) -> Self {
-        self.add_system_to_stage(stage_name, system);
+        self.add_system_to_stage(stage_label, system);
         self
     }
 
@@ -77,12 +77,12 @@ impl Schedule {
         self
     }
 
-    pub fn add_stage<S: Stage>(&mut self, name: impl StageLabel, stage: S) -> &mut Self {
-        let name: Box<dyn StageLabel> = Box::new(name);
-        self.stage_order.push(name.clone());
-        let prev = self.stages.insert(name.clone(), Box::new(stage));
+    pub fn add_stage<S: Stage>(&mut self, label: impl Into<StageLabel>, stage: S) -> &mut Self {
+        let label: Box<dyn StageLabel> = Box::new(label);
+        self.stage_order.push(label.clone());
+        let prev = self.stages.insert(label.clone(), Box::new(stage));
         if prev.is_some() {
-            panic!("Stage already exists: {:?}.", name);
+            panic!("Stage already exists: {:?}.", label);
         }
         self
     }
@@ -90,23 +90,23 @@ impl Schedule {
     pub fn add_stage_after<S: Stage>(
         &mut self,
         target: impl StageLabel,
-        name: impl StageLabel,
+        label: impl StageLabel,
         stage: S,
     ) -> &mut Self {
-        let name: Box<dyn StageLabel> = Box::new(name);
+        let label: Box<dyn StageLabel> = Box::new(name);
         let target = &target as &dyn StageLabel;
         let target_index = self
             .stage_order
             .iter()
             .enumerate()
-            .find(|(_i, stage_name)| &***stage_name == target)
+            .find(|(_i, stage_label)| &***stage_label == target)
             .map(|(i, _)| i)
             .unwrap_or_else(|| panic!("Target stage does not exist: {:?}.", target));
 
-        self.stage_order.insert(target_index + 1, name.clone());
-        let prev = self.stages.insert(name.clone(), Box::new(stage));
+        self.stage_order.insert(target_index + 1, label.clone());
+        let prev = self.stages.insert(label.clone(), Box::new(stage));
         if prev.is_some() {
-            panic!("Stage already exists: {:?}.", name);
+            panic!("Stage already exists: {:?}.", label);
         }
         self
     }
@@ -114,38 +114,38 @@ impl Schedule {
     pub fn add_stage_before<S: Stage>(
         &mut self,
         target: impl StageLabel,
-        name: impl StageLabel,
+        label: impl StageLabel,
         stage: S,
     ) -> &mut Self {
-        let name: Box<dyn StageLabel> = Box::new(name);
+        let label: Box<dyn StageLabel> = Box::new(name);
         let target = &target as &dyn StageLabel;
         let target_index = self
             .stage_order
             .iter()
             .enumerate()
-            .find(|(_i, stage_name)| &***stage_name == target)
+            .find(|(_i, stage_name)| &***stage_label == target)
             .map(|(i, _)| i)
             .unwrap_or_else(|| panic!("Target stage does not exist: {:?}.", target));
 
-        self.stage_order.insert(target_index, name.clone());
-        let prev = self.stages.insert(name.clone(), Box::new(stage));
+        self.stage_order.insert(target_index, label.clone());
+        let prev = self.stages.insert(label.clone(), Box::new(stage));
         if prev.is_some() {
-            panic!("Stage already exists: {:?}.", name);
+            panic!("Stage already exists: {:?}.", label);
         }
         self
     }
 
     pub fn add_system_to_stage(
         &mut self,
-        stage_name: impl StageLabel,
+        stage_label: impl StageLabel,
         system: impl Into<SystemDescriptor>,
     ) -> &mut Self {
         let stage = self
-            .get_stage_mut::<SystemStage>(&stage_name)
+            .get_stage_mut::<SystemStage>(&stage_label)
             .unwrap_or_else(move || {
                 panic!(
                     "Stage '{:?}' does not exist or is not a SystemStage",
-                    stage_name
+                    stage_label
                 )
             });
         stage.add_system(system);
@@ -154,36 +154,36 @@ impl Schedule {
 
     pub fn stage<T: Stage, F: FnOnce(&mut T) -> &mut T>(
         &mut self,
-        name: impl StageLabel,
+        label: impl StageLabel,
         func: F,
     ) -> &mut Self {
-        let stage = self.get_stage_mut::<T>(&name).unwrap_or_else(move || {
-            panic!("stage '{:?}' does not exist or is the wrong type", name)
+        let stage = self.get_stage_mut::<T>(&label).unwrap_or_else(move || {
+            panic!("stage '{:?}' does not exist or is the wrong type", label)
         });
         func(stage);
         self
     }
 
-    pub fn get_stage<T: Stage>(&self, name: &dyn StageLabel) -> Option<&T> {
+    pub fn get_stage<T: Stage>(&self, label: &dyn StageLabel) -> Option<&T> {
         self.stages
-            .get(name)
+            .get(label)
             .and_then(|stage| stage.downcast_ref::<T>())
     }
 
-    pub fn get_stage_mut<T: Stage>(&mut self, name: &dyn StageLabel) -> Option<&mut T> {
+    pub fn get_stage_mut<T: Stage>(&mut self, label: &dyn StageLabel) -> Option<&mut T> {
         self.stages
-            .get_mut(name)
+            .get_mut(label)
             .and_then(|stage| stage.downcast_mut::<T>())
     }
 
     pub fn run_once(&mut self, world: &mut World, resources: &mut Resources) {
-        for name in self.stage_order.iter() {
+        for label in self.stage_order.iter() {
             #[cfg(feature = "trace")]
             let stage_span =
-                bevy_utils::tracing::info_span!("stage", name = &format!("{:?}", name) as &str);
+                bevy_utils::tracing::info_span!("stage", name = &format!("{:?}", label) as &str);
             #[cfg(feature = "trace")]
             let _stage_guard = stage_span.enter();
-            let stage = self.stages.get_mut(name).unwrap();
+            let stage = self.stages.get_mut(label).unwrap();
             stage.run(world, resources);
         }
     }

@@ -54,36 +54,36 @@ impl AppBuilder {
         self
     }
 
-    pub fn add_stage<S: Stage>(&mut self, name: impl StageLabel, stage: S) -> &mut Self {
-        self.app.schedule.add_stage(name, stage);
+    pub fn add_stage<S: Stage>(&mut self, label: impl StageLabel, stage: S) -> &mut Self {
+        self.app.schedule.add_stage(label, stage);
         self
     }
 
     pub fn add_stage_after<S: Stage>(
         &mut self,
         target: impl StageLabel,
-        name: impl StageLabel,
+        label: impl StageLabel,
         stage: S,
     ) -> &mut Self {
-        self.app.schedule.add_stage_after(target, name, stage);
+        self.app.schedule.add_stage_after(target, label, stage);
         self
     }
 
     pub fn add_stage_before<S: Stage>(
         &mut self,
         target: impl StageLabel,
-        name: impl StageLabel,
+        label: impl StageLabel,
         stage: S,
     ) -> &mut Self {
-        self.app.schedule.add_stage_before(target, name, stage);
+        self.app.schedule.add_stage_before(target, label, stage);
         self
     }
 
-    pub fn add_startup_stage<S: Stage>(&mut self, name: impl StageLabel, stage: S) -> &mut Self {
+    pub fn add_startup_stage<S: Stage>(&mut self, label: impl StageLabel, stage: S) -> &mut Self {
         self.app
             .schedule
             .stage(CoreStage::Startup, |schedule: &mut Schedule| {
-                schedule.add_stage(name, stage)
+                schedule.add_stage(label, stage)
             });
         self
     }
@@ -91,13 +91,13 @@ impl AppBuilder {
     pub fn add_startup_stage_after<S: Stage>(
         &mut self,
         target: impl StageLabel,
-        name: impl StageLabel,
+        label: impl StageLabel,
         stage: S,
     ) -> &mut Self {
         self.app
             .schedule
             .stage(CoreStage::Startup, |schedule: &mut Schedule| {
-                schedule.add_stage_after(target, name, stage)
+                schedule.add_stage_after(target, label, stage)
             });
         self
     }
@@ -105,23 +105,23 @@ impl AppBuilder {
     pub fn add_startup_stage_before<S: Stage>(
         &mut self,
         target: impl StageLabel,
-        name: impl StageLabel,
+        label: impl StageLabel,
         stage: S,
     ) -> &mut Self {
         self.app
             .schedule
             .stage(CoreStage::Startup, |schedule: &mut Schedule| {
-                schedule.add_stage_before(target, name, stage)
+                schedule.add_stage_before(target, label, stage)
             });
         self
     }
 
     pub fn stage<T: Stage, F: FnOnce(&mut T) -> &mut T>(
         &mut self,
-        name: impl StageLabel,
+        label: impl StageLabel,
         func: F,
     ) -> &mut Self {
-        self.app.schedule.stage(name, func);
+        self.app.schedule.stage(label, func);
         self
     }
 
@@ -131,10 +131,10 @@ impl AppBuilder {
 
     pub fn add_system_to_stage(
         &mut self,
-        stage_name: impl StageLabel,
+        stage_label: impl StageLabel,
         system: impl Into<SystemDescriptor>,
     ) -> &mut Self {
-        self.app.schedule.add_system_to_stage(stage_name, system);
+        self.app.schedule.add_system_to_stage(stage_label, system);
         self
     }
 
@@ -144,13 +144,13 @@ impl AppBuilder {
 
     pub fn add_startup_system_to_stage(
         &mut self,
-        stage_name: impl StageLabel,
+        stage_label: impl StageLabel,
         system: impl Into<SystemDescriptor>,
     ) -> &mut Self {
         self.app
             .schedule
             .stage(CoreStage::Startup, |schedule: &mut Schedule| {
-                schedule.add_system_to_stage(stage_name, system)
+                schedule.add_system_to_stage(stage_label, system)
             });
         self
     }
