@@ -1,6 +1,6 @@
 use crate::{
-    BoxedSystem, BoxedSystemLabel, ExclusiveSystem, ExclusiveSystemCoerced, ExclusiveSystemFn,
-    System, SystemLabel,
+    AmbiguitySetLabel, BoxedAmbiguitySetLabel, BoxedSystem, BoxedSystemLabel, ExclusiveSystem,
+    ExclusiveSystemCoerced, ExclusiveSystemFn, System, SystemLabel,
 };
 
 /// Encapsulates a system and information on when it run in a `SystemStage`.
@@ -82,7 +82,7 @@ pub struct ParallelSystemDescriptor {
     pub(crate) label: Option<BoxedSystemLabel>,
     pub(crate) before: Vec<BoxedSystemLabel>,
     pub(crate) after: Vec<BoxedSystemLabel>,
-    pub(crate) ambiguity_sets: Vec<Cow<'static, str>>,
+    pub(crate) ambiguity_sets: Vec<BoxedAmbiguitySetLabel>,
 }
 
 fn new_parallel_descriptor(system: BoxedSystem<(), ()>) -> ParallelSystemDescriptor {
@@ -107,7 +107,7 @@ pub trait ParallelSystemDescriptorCoercion {
 
     /// Specifies that the system is exempt from execution order ambiguity detection
     /// with other systems in this set.
-    fn in_ambiguity_set(self, set: impl Into<Cow<'static, str>>) -> ParallelSystemDescriptor;
+    fn in_ambiguity_set(self, set: impl AmbiguitySetLabel) -> ParallelSystemDescriptor;
 }
 
 impl ParallelSystemDescriptorCoercion for ParallelSystemDescriptor {
@@ -126,8 +126,8 @@ impl ParallelSystemDescriptorCoercion for ParallelSystemDescriptor {
         self
     }
 
-    fn in_ambiguity_set(mut self, set: impl Into<Cow<'static, str>>) -> ParallelSystemDescriptor {
-        self.ambiguity_sets.push(set.into());
+    fn in_ambiguity_set(mut self, set: impl AmbiguitySetLabel) -> ParallelSystemDescriptor {
+        self.ambiguity_sets.push(Box::new(set));
         self
     }
 }
@@ -148,7 +148,7 @@ where
         new_parallel_descriptor(Box::new(self)).after(label)
     }
 
-    fn in_ambiguity_set(self, set: impl Into<Cow<'static, str>>) -> ParallelSystemDescriptor {
+    fn in_ambiguity_set(self, set: impl AmbiguitySetLabel) -> ParallelSystemDescriptor {
         new_parallel_descriptor(Box::new(self)).in_ambiguity_set(set)
     }
 }
@@ -166,7 +166,7 @@ impl ParallelSystemDescriptorCoercion for BoxedSystem<(), ()> {
         new_parallel_descriptor(self).after(label)
     }
 
-    fn in_ambiguity_set(self, set: impl Into<Cow<'static, str>>) -> ParallelSystemDescriptor {
+    fn in_ambiguity_set(self, set: impl AmbiguitySetLabel) -> ParallelSystemDescriptor {
         new_parallel_descriptor(self).in_ambiguity_set(set)
     }
 }
@@ -184,7 +184,7 @@ pub struct ExclusiveSystemDescriptor {
     pub(crate) label: Option<BoxedSystemLabel>,
     pub(crate) before: Vec<BoxedSystemLabel>,
     pub(crate) after: Vec<BoxedSystemLabel>,
-    pub(crate) ambiguity_sets: Vec<Cow<'static, str>>,
+    pub(crate) ambiguity_sets: Vec<BoxedAmbiguitySetLabel>,
     pub(crate) insertion_point: InsertionPoint,
 }
 
@@ -211,7 +211,7 @@ pub trait ExclusiveSystemDescriptorCoercion {
 
     /// Specifies that the system is exempt from execution order ambiguity detection
     /// with other systems in this set.
-    fn in_ambiguity_set(self, set: impl Into<Cow<'static, str>>) -> ExclusiveSystemDescriptor;
+    fn in_ambiguity_set(self, set: impl AmbiguitySetLabel) -> ExclusiveSystemDescriptor;
 
     /// Specifies that the system should run with other exclusive systems at the start of stage.
     fn at_start(self) -> ExclusiveSystemDescriptor;
@@ -240,8 +240,8 @@ impl ExclusiveSystemDescriptorCoercion for ExclusiveSystemDescriptor {
         self
     }
 
-    fn in_ambiguity_set(mut self, set: impl Into<Cow<'static, str>>) -> ExclusiveSystemDescriptor {
-        self.ambiguity_sets.push(set.into());
+    fn in_ambiguity_set(mut self, set: impl AmbiguitySetLabel) -> ExclusiveSystemDescriptor {
+        self.ambiguity_sets.push(Box::new(set));
         self
     }
 
@@ -277,7 +277,7 @@ where
         new_exclusive_descriptor(Box::new(self)).after(label)
     }
 
-    fn in_ambiguity_set(self, set: impl Into<Cow<'static, str>>) -> ExclusiveSystemDescriptor {
+    fn in_ambiguity_set(self, set: impl AmbiguitySetLabel) -> ExclusiveSystemDescriptor {
         new_exclusive_descriptor(Box::new(self)).in_ambiguity_set(set)
     }
 

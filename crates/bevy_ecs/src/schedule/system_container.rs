@@ -1,7 +1,8 @@
 use std::{borrow::Cow, ptr::NonNull};
 
 use crate::{
-    BoxedSystemLabel, ExclusiveSystem, ExclusiveSystemDescriptor, ParallelSystemDescriptor, System,
+    BoxedAmbiguitySetLabel, BoxedSystemLabel, ExclusiveSystem, ExclusiveSystemDescriptor,
+    ParallelSystemDescriptor, System,
 };
 
 pub(super) trait SystemContainer {
@@ -12,7 +13,7 @@ pub(super) trait SystemContainer {
     fn label(&self) -> &Option<BoxedSystemLabel>;
     fn before(&self) -> &[BoxedSystemLabel];
     fn after(&self) -> &[BoxedSystemLabel];
-    fn ambiguity_sets(&self) -> &[Cow<'static, str>];
+    fn ambiguity_sets(&self) -> &[BoxedAmbiguitySetLabel];
     fn is_compatible(&self, other: &Self) -> bool;
 }
 
@@ -23,7 +24,7 @@ pub(super) struct ExclusiveSystemContainer {
     label: Option<BoxedSystemLabel>,
     before: Vec<BoxedSystemLabel>,
     after: Vec<BoxedSystemLabel>,
-    ambiguity_sets: Vec<Cow<'static, str>>,
+    ambiguity_sets: Vec<BoxedAmbiguitySetLabel>,
 }
 
 impl ExclusiveSystemContainer {
@@ -77,7 +78,7 @@ impl SystemContainer for ExclusiveSystemContainer {
         &self.after
     }
 
-    fn ambiguity_sets(&self) -> &[Cow<'static, str>] {
+    fn ambiguity_sets(&self) -> &[BoxedAmbiguitySetLabel] {
         &self.ambiguity_sets
     }
 
@@ -94,7 +95,7 @@ pub struct ParallelSystemContainer {
     label: Option<BoxedSystemLabel>,
     before: Vec<BoxedSystemLabel>,
     after: Vec<BoxedSystemLabel>,
-    ambiguity_sets: Vec<Cow<'static, str>>,
+    ambiguity_sets: Vec<BoxedAmbiguitySetLabel>,
 }
 
 impl SystemContainer for ParallelSystemContainer {
@@ -130,7 +131,7 @@ impl SystemContainer for ParallelSystemContainer {
         &self.after
     }
 
-    fn ambiguity_sets(&self) -> &[Cow<'static, str>] {
+    fn ambiguity_sets(&self) -> &[BoxedAmbiguitySetLabel] {
         &self.ambiguity_sets
     }
 

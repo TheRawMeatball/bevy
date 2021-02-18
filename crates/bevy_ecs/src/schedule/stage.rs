@@ -1237,8 +1237,8 @@ mod tests {
         stage.rebuild_orders_and_dependencies();
         let ambiguities = find_ambiguities_labels(&stage.parallel);
         assert!(
-            ambiguities.contains(&("0".into(), "3".into()))
-                || ambiguities.contains(&("3".into(), "0".into()))
+            ambiguities.contains(&(Box::new("0"), Box::new("3")))
+                || ambiguities.contains(&(Box::new("3"), Box::new("0")))
         );
         assert_eq!(ambiguities.len(), 1);
 
@@ -1301,8 +1301,8 @@ mod tests {
         stage.rebuild_orders_and_dependencies();
         let ambiguities = find_ambiguities_labels(&stage.parallel);
         assert!(
-            ambiguities.contains(&("1".into(), "2".into()))
-                || ambiguities.contains(&("2".into(), "1".into()))
+            ambiguities.contains(&(Box::new("1"), Box::new("2")))
+                || ambiguities.contains(&(Box::new("2"), Box::new("1")))
         );
         assert_eq!(ambiguities.len(), 1);
 
@@ -1419,12 +1419,12 @@ mod tests {
         stage.rebuild_orders_and_dependencies();
         let ambiguities = find_ambiguities_labels(&stage.parallel);
         assert!(
-            ambiguities.contains(&("1".into(), "4".into()))
-                || ambiguities.contains(&("4".into(), "1".into()))
+            ambiguities.contains(&(Box::new("1"), Box::new("4")))
+                || ambiguities.contains(&(Box::new("4"), Box::new("1")))
         );
         assert!(
-            ambiguities.contains(&("2".into(), "4".into()))
-                || ambiguities.contains(&("4".into(), "2".into()))
+            ambiguities.contains(&(Box::new("2"), Box::new("4")))
+                || ambiguities.contains(&(Box::new("4"), Box::new("2")))
         );
         assert_eq!(ambiguities.len(), 2);
 
@@ -1490,20 +1490,20 @@ mod tests {
         stage.rebuild_orders_and_dependencies();
         let ambiguities = find_ambiguities_labels(&stage.exclusive_at_start);
         assert!(
-            ambiguities.contains(&("2".into(), "3".into()))
-                || ambiguities.contains(&("3".into(), "2".into()))
+            ambiguities.contains(&(Box::new("2"), Box::new("3")))
+                || ambiguities.contains(&(Box::new("3"), Box::new("2")))
         );
         assert!(
-            ambiguities.contains(&("1".into(), "4".into()))
-                || ambiguities.contains(&("4".into(), "1".into()))
+            ambiguities.contains(&(Box::new("1"), Box::new("4")))
+                || ambiguities.contains(&(Box::new("4"), Box::new("1")))
         );
         assert!(
-            ambiguities.contains(&("2".into(), "4".into()))
-                || ambiguities.contains(&("4".into(), "2".into()))
+            ambiguities.contains(&(Box::new("2"), Box::new("4")))
+                || ambiguities.contains(&(Box::new("4"), Box::new("2")))
         );
         assert!(
-            ambiguities.contains(&("2".into(), "5".into()))
-                || ambiguities.contains(&("5".into(), "2".into()))
+            ambiguities.contains(&(Box::new("2"), Box::new("5")))
+                || ambiguities.contains(&(Box::new("5"), Box::new("2")))
         );
         assert_eq!(ambiguities.len(), 4);
 
