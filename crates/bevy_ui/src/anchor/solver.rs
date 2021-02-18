@@ -216,11 +216,16 @@ pub(crate) fn solve(
                 let mut remaining_space = effective_size - total_flex_basis;
                 let mut exit_flag = false;
                 let locked: Vec<_> = 'outer: loop {
+                    let relevant_factor = if remaining_space > 0. {
+                        total_flex_grow
+                    } else {
+                        total_flex_shrink
+                    };
                     let delta = remaining_space
-                        / if remaining_space > 0. {
-                            total_flex_grow
+                        / if relevant_factor == 0. {
+                            1.
                         } else {
-                            total_flex_shrink
+                            relevant_factor
                         };
                     for fi in child_nodes.iter_mut().filter(|fi| !fi.locked) {
                         fi.base_grown_size = fi.flex_basis
