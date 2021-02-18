@@ -502,23 +502,3 @@ fn derive_label(input: DeriveInput, label_type: Ident) -> TokenStream2 {
         }
     }
 }
-
-/*fn derive_label(input: DeriveInput, label_type: Ident) -> TokenStream2 {
-    let ident = input.ident;
-
-    let manifest = Manifest::new().unwrap();
-    let path_str = if let Some(package) = manifest.find(|name| name == "bevy") {
-        format!("{}::ecs", package.name)
-    } else if let Some(package) = manifest.find(|name| name == "bevy_internal") {
-        format!("{}::ecs", package.name)
-    } else if let Some(package) = manifest.find(|name| name == "bevy_ecs") {
-        package.name
-    } else {
-        "bevy_ecs".to_string()
-    };
-    let crate_path: Path = syn::parse(path_str.parse::<TokenStream>().unwrap()).unwrap();
-
-    quote! {
-        impl #crate_path::Label<#crate_path::#label_type> for #ident {}
-    }
-}*/
