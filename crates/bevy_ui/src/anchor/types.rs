@@ -51,10 +51,11 @@ impl Default for Constraint {
     }
 }
 
-// Maybe make this an enum and implement subset of flexbox / css grid?
 #[derive(Clone, Debug)]
 pub struct ChildConstraint {
-    pub weight: f32,
+    pub flex_basis: f32,
+    pub flex_grow: f32,
+    pub flex_shrink: f32,
     pub min_size: ConstraintSize,
     pub max_size: ConstraintSize,
 }
@@ -65,19 +66,12 @@ pub enum ConstraintSize {
     FromContent,
 }
 
-impl ConstraintSize {
-    pub(crate) fn unwrap_or_else(self, f: impl FnOnce() -> f32) -> f32 {
-        match self {
-            ConstraintSize::Pixels(p) => p,
-            ConstraintSize::FromContent => f(),
-        }
-    }
-}
-
 impl Default for ChildConstraint {
     fn default() -> Self {
         Self {
-            weight: 1.,
+            flex_basis: 0.,
+            flex_grow: 1.,
+            flex_shrink: 1.,
             min_size: ConstraintSize::Pixels(0.),
             max_size: ConstraintSize::Pixels(f32::MAX),
         }
@@ -88,7 +82,7 @@ impl Default for ChildConstraint {
 pub enum SpreadConstraint {
     None,
     // TODO: align this with a well-defined layout algorithm
-    Directed { margin: f32, direction: Direction },
+    Flex { margin: f32, direction: Direction },
     // TODO: Implement these!
     // Wrap { margin: f32, direction: Direction },
     // Grid { width: f32, height: f32 },

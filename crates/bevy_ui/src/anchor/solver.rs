@@ -1,6 +1,3 @@
-use std::collections::BTreeMap;
-
-use bevy_core::FloatOrd;
 use bevy_ecs::{Entity, Flags, Query};
 use bevy_math::{Rect, Vec2, Vec3};
 use bevy_text::CalculatedSize;
@@ -157,96 +154,116 @@ pub(crate) fn solve(
                     solve(*child, ts, solve_layout.padding, false, nodes, mutables);
                 }
             }
-            SpreadConstraint::Directed { direction, margin } => {
-                let child_nodes = children.iter().map(|c| {
-                    (
-                        nodes
-                            .get_component::<AnchorLayout>(*c)
-                            .unwrap()
-                            .child_constraint
-                            .as_ref()
-                            .unwrap(),
-                        {
-                            let size = nodes.get_component::<MinSize>(*c).unwrap().size;
-                            match direction {
-                                Direction::Left | Direction::Right => size.x,
-                                Direction::Up | Direction::Down => size.y,
-                            }
-                        },
-                        c,
-                    )
-                });
-
+            SpreadConstraint::Flex { direction, margin } => {
                 let ts = ts
                     - Vec2::new(
                         solve_layout.padding.left + solve_layout.padding.right,
                         solve_layout.padding.bottom + solve_layout.padding.top,
                     );
 
-                let mut free_length = match direction {
+                let total_size = match direction {
                     Direction::Left | Direction::Right => ts.x,
                     Direction::Up | Direction::Down => ts.y,
-                } - (children.iter().count() - 1) as f32 * margin;
-
-                let mut undef = vec![];
-                let mut undef_weight_sum = 0.;
-
-                let mut locked = BTreeMap::<usize, (&Entity, f32)>::new();
-
-                for (i, c) in child_nodes.enumerate() {
-                    undef_weight_sum += c.0.weight;
-                    undef.push((
-                        i,
-                        c.0.weight,
-                        c.0.min_size.unwrap_or_else(|| c.1),
-                        c.0.max_size.unwrap_or_else(|| c.1),
-                        c.2,
-                    ));
-                }
-
-                loop {
-                    let mut dirty = BTreeMap::<_, Vec<_>>::new();
-                    let length_per_weight = free_length / undef_weight_sum;
-                    let mut delta = 0.;
-
-                    {
-                        let mut i = 0;
-                        while i != undef.len() {
-                            let (_, weight, min, max, _) = undef[i];
-                            let len = length_per_weight * weight;
-                            if !(min..max).contains(&len) {
-                                let clamped = len.clamp(min, max);
-                                delta += clamped - len;
-                                let entry = dirty.entry(FloatOrd(clamped - len));
-                                entry.or_default().push((undef.swap_remove(i), clamped));
-                            } else {
-                                i += 1;
-                            }
-                        }
-                    }
-
-                    if dirty.is_empty() {
-                        for (i, weight, .., entity) in undef.iter() {
-                            let len = length_per_weight * weight;
-                            locked.insert(*i, (entity, len));
-                        }
-                        break;
-                    } else {
-                        let key = if delta > 0. {
-                            *dirty.keys().next_back().unwrap()
-                        } else {
-                            *dirty.keys().next().unwrap()
+                };
+                let mut child_count = 0;
+                let mut total_flex_basis = 0.;
+                let mut total_flex_grow = 0.;
+                let mut total_flex_shrink = 0.;
+                let mut child_nodes: Vec<_> = children
+                    .iter()
+                    .map(|&entity| {
+                        child_count += 1;
+                        let &ChildConstraint {
+                            flex_basis,
+                            flex_grow,
+                            flex_shrink,
+                            min_size,
+                            max_size,
+                        } = nodes
+                            .get_component::<AnchorLayout>(entity)
+                            .unwrap()
+                            .child_constraint
+                            .as_ref()
+                            .unwrap();
+                        let inherent_size = nodes.get_component::<MinSize>(entity).unwrap().size;
+                        let main_size = match direction {
+                            Direction::Left | Direction::Right => inherent_size.x,
+                            Direction::Up | Direction::Down => inherent_size.y,
                         };
-                        let ((i, weight, .., entity), clamped) =
-                            dirty.entry(key).or_default().pop().unwrap();
-                        locked.insert(i, (entity, clamped));
-                        free_length -= clamped;
-                        undef_weight_sum -= weight;
-                        for (v, _) in dirty.into_iter().map(|v| v.1).flatten() {
-                            undef.push(v);
+                        total_flex_basis += flex_basis;
+                        total_flex_grow += flex_grow;
+                        total_flex_shrink += flex_shrink;
+                        FlexItem {
+                            entity,
+                            min_size: match min_size {
+                                ConstraintSize::Pixels(p) => p,
+                                ConstraintSize::FromContent => main_size,
+                            },
+                            max_size: match max_size {
+                                ConstraintSize::Pixels(p) => p,
+                                ConstraintSize::FromContent => main_size,
+                            },
+                            flex_grow,
+                            flex_shrink,
+                            flex_basis,
+                            base_grown_size: 0.,
+                            clamped: 0.,
+                            locked: false,
+                        }
+                    })
+                    .collect();
+                let effective_size = total_size - (child_count - 1).max(0) as f32 * margin;
+                let mut remaining_space = effective_size - total_flex_basis;
+                let mut exit_flag = false;
+                let locked: Vec<_> = 'outer: loop {
+                    let delta = remaining_space
+                        / if remaining_space > 0. {
+                            total_flex_grow
+                        } else {
+                            total_flex_shrink
+                        };
+                    for fi in child_nodes.iter_mut().filter(|fi| !fi.locked) {
+                        fi.base_grown_size = fi.flex_basis
+                            + delta
+                                * if remaining_space > 0. {
+                                    fi.flex_grow
+                                } else {
+                                    fi.flex_shrink
+                                };
+                    }
+                    let mut total_violation = 0.;
+                    for fi in child_nodes.iter_mut().filter(|fi| !fi.locked) {
+                        fi.clamped = fi.base_grown_size.clamp(fi.min_size, fi.max_size);
+                        total_violation += fi.clamped - fi.base_grown_size;
+                    }
+
+                    if exit_flag {
+                        break 'outer {
+                            child_nodes
+                                .into_iter()
+                                .map(|fi| (fi.entity, fi.clamped))
+                                .collect()
+                        };
+                    }
+
+                    if total_violation == 0. {
+                        exit_flag = true;
+                        continue;
+                    }
+
+                    for fi in child_nodes.iter_mut().filter(|fi| !fi.locked) {
+                        if match total_violation {
+                            tv if tv < 0. => fi.clamped < fi.base_grown_size,
+                            tv if tv > 0. => fi.clamped > fi.base_grown_size,
+                            _ => false,
+                        } {
+                            fi.locked = true;
+                            remaining_space -= fi.clamped;
+                            total_flex_grow -= fi.flex_grow;
+                            total_flex_shrink -= fi.flex_shrink;
                         }
                     }
-                }
+                };
 
                 let (calc_pos, calc_size): (fn(f32, f32, Vec2) -> Vec2, fn(f32, Vec2) -> Vec2) =
                     match direction {
@@ -277,7 +294,7 @@ pub(crate) fn solve(
                     0.,
                 ) / 2.;
 
-                for &(&entity, size) in locked.values() {
+                for (entity, size) in locked.into_iter() {
                     let mut transform = mutables.get_component_mut::<Transform>(entity).unwrap();
                     transform.translation = calc_pos(size, offset, ts).extend(0.) + padding_offset;
                     offset += size + margin;
@@ -333,6 +350,18 @@ impl AxisConstraint {
         let offset = true_space * (anchors.0 - 0.5) + p1 + s / 2.;
         AxisConstraintSolve { offset, size: s }
     }
+}
+
+struct FlexItem {
+    entity: Entity,
+    min_size: f32,
+    max_size: f32,
+    flex_grow: f32,
+    flex_shrink: f32,
+    base_grown_size: f32,
+    flex_basis: f32,
+    clamped: f32,
+    locked: bool,
 }
 
 struct AxisConstraintSolve {

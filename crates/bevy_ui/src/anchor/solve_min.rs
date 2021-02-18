@@ -27,7 +27,7 @@ pub fn solve(
                 state.y = state.y.max(c.y);
                 state
             }),
-            SpreadConstraint::Directed { margin, direction } => {
+            SpreadConstraint::Flex { margin, direction } => {
                 let (mut internal, count) =
                     children
                         .iter()

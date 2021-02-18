@@ -111,7 +111,7 @@ fn setup(
                                     x: AxisConstraint::DoubleMargin(10., 10.),
                                     y: AxisConstraint::DoubleMargin(10., 10.),
                                 },
-                                children_spread: SpreadConstraint::Directed {
+                                children_spread: SpreadConstraint::Flex {
                                     direction: Direction::Down,
                                     margin: 10.,
                                 },
@@ -130,7 +130,7 @@ fn setup(
                                             min_size: ConstraintSize::FromContent,
                                             ..Default::default()
                                         }),
-                                        children_spread: SpreadConstraint::Directed {
+                                        children_spread: SpreadConstraint::Flex {
                                             direction: Direction::Right,
                                             margin: 5.,
                                         },
@@ -243,7 +243,9 @@ fn setup(
                                 material: materials.add(Color::GREEN.into()),
                                 anchor_layout: AnchorLayout {
                                     child_constraint: Some(ChildConstraint {
-                                        weight: 1.,
+                                        flex_grow: 1.,
+                                        flex_shrink: 1.,
+                                        flex_basis: 0.,
                                         min_size: ConstraintSize::Pixels(200.),
                                         ..Default::default()
                                     }),
@@ -255,7 +257,9 @@ fn setup(
                                 material: materials.add(Color::TEAL.into()),
                                 anchor_layout: AnchorLayout {
                                     child_constraint: Some(ChildConstraint {
-                                        weight: 2.,
+                                        flex_grow: 2.,
+                                        flex_shrink: 2.,
+                                        flex_basis: 0.,
                                         ..Default::default()
                                     }),
                                     ..Default::default()
