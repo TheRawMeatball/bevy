@@ -12,6 +12,7 @@ pub(super) trait SystemContainer {
     fn label(&self) -> &Option<BoxedSystemLabel>;
     fn before(&self) -> &[BoxedSystemLabel];
     fn after(&self) -> &[BoxedSystemLabel];
+    fn ambiguity_sets(&self) -> &[Cow<'static, str>];
     fn is_compatible(&self, other: &Self) -> bool;
 }
 
@@ -22,6 +23,7 @@ pub(super) struct ExclusiveSystemContainer {
     label: Option<BoxedSystemLabel>,
     before: Vec<BoxedSystemLabel>,
     after: Vec<BoxedSystemLabel>,
+    ambiguity_sets: Vec<Cow<'static, str>>,
 }
 
 impl ExclusiveSystemContainer {
@@ -33,6 +35,7 @@ impl ExclusiveSystemContainer {
             label: descriptor.label,
             before: descriptor.before,
             after: descriptor.after,
+            ambiguity_sets: descriptor.ambiguity_sets,
         }
     }
 
@@ -74,6 +77,10 @@ impl SystemContainer for ExclusiveSystemContainer {
         &self.after
     }
 
+    fn ambiguity_sets(&self) -> &[Cow<'static, str>] {
+        &self.ambiguity_sets
+    }
+
     fn is_compatible(&self, _: &Self) -> bool {
         false
     }
@@ -87,6 +94,7 @@ pub struct ParallelSystemContainer {
     label: Option<BoxedSystemLabel>,
     before: Vec<BoxedSystemLabel>,
     after: Vec<BoxedSystemLabel>,
+    ambiguity_sets: Vec<Cow<'static, str>>,
 }
 
 impl SystemContainer for ParallelSystemContainer {
@@ -122,6 +130,10 @@ impl SystemContainer for ParallelSystemContainer {
         &self.after
     }
 
+    fn ambiguity_sets(&self) -> &[Cow<'static, str>] {
+        &self.ambiguity_sets
+    }
+
     fn is_compatible(&self, other: &Self) -> bool {
         self.system()
             .component_access()
@@ -146,6 +158,7 @@ impl ParallelSystemContainer {
             label: descriptor.label,
             before: descriptor.before,
             after: descriptor.after,
+            ambiguity_sets: descriptor.ambiguity_sets,
         }
     }
 
