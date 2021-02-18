@@ -362,6 +362,10 @@ name = "ui"
 path = "examples/ui/ui.rs"
 
 [[example]]
+name = "geom3trik"
+path = "examples/ui/geom3trik.rs"
+
+[[example]]
 name = "clear_color"
 path = "examples/window/clear_color.rs"
 
