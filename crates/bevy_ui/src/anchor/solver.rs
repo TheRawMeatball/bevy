@@ -167,6 +167,7 @@ pub(crate) fn solve(
                 };
                 let mut child_count = 0;
                 let mut total_flex_basis = 0.;
+                let mut total_shrink_basis = 0.;
                 let mut total_flex_grow = 0.;
                 let mut total_flex_shrink = 0.;
                 let mut child_nodes: Vec<_> = children
@@ -191,6 +192,7 @@ pub(crate) fn solve(
                             Direction::Up | Direction::Down => inherent_size.y,
                         };
                         total_flex_basis += flex_basis;
+                        total_shrink_basis += flex_basis * flex_shrink;
                         total_flex_grow += flex_grow;
                         total_flex_shrink += flex_shrink;
                         FlexItem {
@@ -216,25 +218,15 @@ pub(crate) fn solve(
                 let mut remaining_space = effective_size - total_flex_basis;
                 let mut exit_flag = false;
                 let locked: Vec<_> = 'outer: loop {
-                    let relevant_factor = if remaining_space > 0. {
-                        total_flex_grow
-                    } else {
-                        total_flex_shrink
-                    };
-                    let delta = remaining_space
-                        / if relevant_factor == 0. {
-                            1.
+                    let delta = |fi: &FlexItem| {
+                        if remaining_space > 0. {
+                            remaining_space * fi.flex_grow * total_flex_grow
                         } else {
-                            relevant_factor
-                        };
+                            remaining_space * fi.flex_shrink * fi.flex_basis / total_shrink_basis
+                        }
+                    };
                     for fi in child_nodes.iter_mut().filter(|fi| !fi.locked) {
-                        fi.base_grown_size = fi.flex_basis
-                            + delta
-                                * if remaining_space > 0. {
-                                    fi.flex_grow
-                                } else {
-                                    fi.flex_shrink
-                                };
+                        fi.base_grown_size = fi.flex_basis + delta(fi)
                     }
                     let mut total_violation = 0.;
                     for fi in child_nodes.iter_mut().filter(|fi| !fi.locked) {
@@ -266,6 +258,7 @@ pub(crate) fn solve(
                             remaining_space -= fi.clamped;
                             total_flex_grow -= fi.flex_grow;
                             total_flex_shrink -= fi.flex_shrink;
+                            total_shrink_basis -= fi.flex_shrink;
                         }
                     }
                 };
