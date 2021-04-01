@@ -46,4 +46,9 @@ impl<'w, T> Mut<'w, T> {
         self.component_ticks
             .is_changed(self.last_change_tick, self.change_tick)
     }
+
+    pub fn inner(mut self) -> &'w mut T {
+        self.deref_mut();
+        self.value
+    }
 }

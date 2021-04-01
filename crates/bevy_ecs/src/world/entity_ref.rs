@@ -68,6 +68,22 @@ impl<'w> EntityRef<'w> {
         }
     }
 
+    #[inline]
+    pub fn is_changed<T: Component>(&self) -> bool {
+        // SAFE: entity location is valid and returned component is of type T
+        let ticks = unsafe {
+            &*get_component_and_ticks_with_type(
+                self.world,
+                TypeId::of::<T>(),
+                self.entity,
+                self.location,
+            )
+            .unwrap()
+            .1
+        };
+        ticks.is_changed(self.world.last_change_tick(), self.world.read_change_tick())
+    }
+
     /// # Safety
     /// This allows aliased mutability. You must make sure this call does not result in multiple
     /// mutable references to the same component
