@@ -101,6 +101,7 @@ impl ComponentInfo {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
 pub struct ComponentId(usize);
 
 impl ComponentId {
@@ -307,6 +308,7 @@ impl Components {
 }
 
 #[derive(Copy, Clone, Debug)]
+#[repr(C)]
 pub struct ComponentTicks {
     pub(crate) added: u32,
     pub(crate) changed: u32,

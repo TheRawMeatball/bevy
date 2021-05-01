@@ -47,3 +47,11 @@ impl<'w, T> Mut<'w, T> {
             .is_changed(self.last_change_tick, self.change_tick)
     }
 }
+
+#[repr(C)]
+pub struct UnsafeMut {
+    pub value: *mut u8,
+    pub component_ticks: *mut ComponentTicks,
+    pub last_change_tick: u32,
+    pub change_tick: u32,
+}
