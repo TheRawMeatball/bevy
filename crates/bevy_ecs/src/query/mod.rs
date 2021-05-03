@@ -3,6 +3,7 @@ mod fetch;
 mod filter;
 mod iter;
 mod state;
+mod untyped;
 
 pub use access::*;
 pub use fetch::*;

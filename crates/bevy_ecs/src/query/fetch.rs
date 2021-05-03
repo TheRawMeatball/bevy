@@ -143,7 +143,6 @@ pub trait UntypedFetch {
 }
 
 pub unsafe trait UntypedFetchState: Sized {
-    fn new(component_id: ComponentId, world: &mut World) -> Option<Self>;
     fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) -> bool;
     fn update_archetype_component_access(
         &self,
@@ -255,15 +254,17 @@ pub struct UntypedReadState {
     storage_type: StorageType,
 }
 
-unsafe impl UntypedFetchState for UntypedReadState {
-    fn new(component_id: ComponentId, world: &mut World) -> Option<Self> {
+impl UntypedReadState {
+    pub fn new(component_id: ComponentId, world: &mut World) -> Option<Self> {
         let component_info = world.components.get_info(component_id)?;
         Some(UntypedReadState {
             component_id: component_info.id(),
             storage_type: component_info.storage_type(),
         })
     }
+}
 
+unsafe impl UntypedFetchState for UntypedReadState {
     fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) -> bool {
         if access.access().has_write(self.component_id) {
             return true;
@@ -609,15 +610,17 @@ pub struct UntypedWriteState {
     storage_type: StorageType,
 }
 
-unsafe impl UntypedFetchState for UntypedWriteState {
-    fn new(component_id: ComponentId, world: &mut World) -> Option<Self> {
+impl UntypedWriteState {
+    pub fn new(component_id: ComponentId, world: &mut World) -> Option<Self> {
         let component_info = world.components.get_info(component_id)?;
         Some(UntypedWriteState {
             component_id: component_info.id(),
             storage_type: component_info.storage_type(),
         })
     }
+}
 
+unsafe impl UntypedFetchState for UntypedWriteState {
     fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) -> bool {
         if access.access().has_read(self.component_id) {
             return true;
@@ -763,12 +766,104 @@ pub struct OptionFetch<T> {
     matches: bool,
 }
 
+impl<T: UntypedFetch> UntypedFetch for OptionFetch<T> {
+    type Item = Option<T::Item>;
+    type State = OptionState<T::State>;
+
+    #[inline]
+    fn is_dense(&self) -> bool {
+        self.fetch.is_dense()
+    }
+
+    unsafe fn new(
+        world: &World,
+        state: &Self::State,
+        last_change_tick: u32,
+        change_tick: u32,
+    ) -> Self {
+        Self {
+            fetch: T::new(world, &state.state, last_change_tick, change_tick),
+            matches: false,
+        }
+    }
+
+    #[inline]
+    unsafe fn set_archetype(
+        &mut self,
+        state: &Self::State,
+        archetype: &Archetype,
+        tables: &Tables,
+    ) {
+        self.matches = state.state.matches_archetype(archetype);
+        if self.matches {
+            self.fetch.set_archetype(&state.state, archetype, tables);
+        }
+    }
+
+    #[inline]
+    unsafe fn set_table(&mut self, state: &Self::State, table: &Table) {
+        self.matches = state.state.matches_table(table);
+        if self.matches {
+            self.fetch.set_table(&state.state, table);
+        }
+    }
+
+    #[inline]
+    unsafe fn archetype_fetch(&mut self, archetype_index: usize) -> Self::Item {
+        if self.matches {
+            Some(self.fetch.archetype_fetch(archetype_index))
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    unsafe fn table_fetch(&mut self, table_row: usize) -> Self::Item {
+        if self.matches {
+            Some(self.fetch.table_fetch(table_row))
+        } else {
+            None
+        }
+    }
+}
+
 /// SAFETY: OptionFetch is read only because T is read only
 unsafe impl<T: ReadOnlyFetch> ReadOnlyFetch for OptionFetch<T> {}
 
 /// The [`FetchState`] of `Option<T>`.
-pub struct OptionState<T: FetchState> {
+pub struct OptionState<T> {
     state: T,
+}
+
+unsafe impl<T: UntypedFetchState> UntypedFetchState for OptionState<T> {
+    fn update_component_access(&self, access: &mut FilteredAccess<ComponentId>) -> bool {
+        self.state.update_component_access(access)
+    }
+
+    fn update_archetype_component_access(
+        &self,
+        archetype: &Archetype,
+        access: &mut Access<ArchetypeComponentId>,
+    ) {
+        if self.state.matches_archetype(archetype) {
+            self.state
+                .update_archetype_component_access(archetype, access)
+        }
+    }
+
+    fn matches_archetype(&self, _archetype: &Archetype) -> bool {
+        true
+    }
+
+    fn matches_table(&self, _table: &Table) -> bool {
+        true
+    }
+}
+
+impl<T> OptionState<T> {
+    pub fn new(state: T) -> Self {
+        Self { state }
+    }
 }
 
 // SAFETY: component access and archetype component access are properly updated according to the
