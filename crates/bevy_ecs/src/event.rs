@@ -167,7 +167,7 @@ impl<'a, T: Component> EventWriter<'a, T> {
         self.events.send(event);
     }
 
-    pub fn send_batch(&mut self, events: impl Iterator<Item = T>) {
+    pub fn send_batch(&mut self, events: impl IntoIterator<Item = T>) {
         self.events.extend(events);
     }
 }
