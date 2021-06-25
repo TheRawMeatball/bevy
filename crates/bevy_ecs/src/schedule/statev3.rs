@@ -25,7 +25,7 @@ impl<T> PatternLiteral<T> {
     }
 }
 
-macro_rules! pl {
+macro_rules! pattern_literal {
     ($pat:pat) => {
         PatternLiteral(|val| matches!(val, $pat), stringify!($pat))
     };
@@ -203,6 +203,14 @@ mod test {
         D(bool),
     }
 
+    impl SimpleState {
+        const IN_A: PatternLiteral<Self> = pattern_literal!(Self::A);
+        const IN_B: PatternLiteral<Self> = pattern_literal!(Self::B);
+        const IN_C: PatternLiteral<Self> = pattern_literal!(Self::C);
+        const IN_D: PatternLiteral<Self> = pattern_literal!(Self::D(false));
+        const IN_D_FT: PatternLiteral<Self> = pattern_literal!(Self::D(true));
+    }
+
     #[test]
     fn simple_state() {
         let mut world = World::new();
@@ -230,22 +238,22 @@ mod test {
         stage.add_system(
             (|| println!("Entering SimpleState::A"))
                 .system()
-                .with_run_criteria(on_enter(pl!(SimpleState::A))),
+                .with_run_criteria(on_enter(pattern_literal!(SimpleState::A))),
         );
         stage.add_system(
             (|| println!("Updating SimpleState::A"))
                 .system()
-                .with_run_criteria(on_update(pl!(SimpleState::A))),
+                .with_run_criteria(on_update(pattern_literal!(SimpleState::A))),
         );
         stage.add_system(
             (|| println!("Exiting SimpleState::A"))
                 .system()
-                .with_run_criteria(on_exit(pl!(SimpleState::A))),
+                .with_run_criteria(on_exit(pattern_literal!(SimpleState::A))),
         );
         stage.add_system(
             (|| println!("Entering SimpleState::B"))
                 .system()
-                .with_run_criteria(on_enter(pl!(SimpleState::B))),
+                .with_run_criteria(on_enter(pattern_literal!(SimpleState::B))),
         );
         stage.add_system(
             (|mut er: EventWriter<StateChange<SimpleState>>| {
@@ -256,12 +264,12 @@ mod test {
                 });
             })
             .system()
-            .with_run_criteria(on_update(pl!(SimpleState::B))),
+            .with_run_criteria(on_update(pattern_literal!(SimpleState::B))),
         );
         stage.add_system(
             (|| println!("Exiting SimpleState::B"))
                 .system()
-                .with_run_criteria(on_exit(pl!(SimpleState::B))),
+                .with_run_criteria(on_exit(pattern_literal!(SimpleState::B))),
         );
         stage.add_system(
             (|mut ew: EventWriter<StateChange<SimpleState>>| {
@@ -272,26 +280,26 @@ mod test {
                 })
             })
             .system()
-            .with_run_criteria(on_enter(pl!(SimpleState::C))),
+            .with_run_criteria(on_enter(pattern_literal!(SimpleState::C))),
         );
         stage.add_system(
             (|| println!("Updating SimpleState::C"))
                 .system()
-                .with_run_criteria(on_update(pl!(SimpleState::C))),
+                .with_run_criteria(on_update(pattern_literal!(SimpleState::C))),
         );
         stage.add_system(
             (|| println!("Exiting SimpleState::C"))
                 .system()
-                .with_run_criteria(on_exit(pl!(SimpleState::C))),
+                .with_run_criteria(on_exit(pattern_literal!(SimpleState::C))),
         );
         stage.add_system(
             (|| println!("Entering SimpleState::D"))
                 .system()
-                .with_run_criteria(on_enter(pl!(SimpleState::D(_)))),
+                .with_run_criteria(on_enter(pattern_literal!(SimpleState::D(_)))),
         );
         stage.add_system_set(
             SystemSet::new()
-                .with_run_criteria(on_update(pl!(SimpleState::D(false))))
+                .with_run_criteria(on_update(pattern_literal!(SimpleState::D(false))))
                 .with_system(
                     (|| println!("Updating SimpleState::D"))
                         .system()
@@ -322,12 +330,12 @@ mod test {
         stage.add_system(
             (|| println!("Fixed Updating SimpleState::D"))
                 .system()
-                .with_run_criteria(on_update(pl!(SimpleState::D(true)))),
+                .with_run_criteria(on_update(pattern_literal!(SimpleState::D(true)))),
         );
         stage.add_system(
             (|| println!("Exiting SimpleState::D"))
                 .system()
-                .with_run_criteria(on_exit(pl!(SimpleState::D(_)))),
+                .with_run_criteria(on_exit(pattern_literal!(SimpleState::D(_)))),
         );
         stage.run(&mut world);
         dbg!("first run done!");
