@@ -181,13 +181,11 @@ fn state_driver<T: Component + Clone>(
             } else if scratch.done {
                 scratch.done = false;
                 return ShouldRun::No;
+            } else if scratch.prepare_for_exit {
+                scratch.prepare_for_exit = false;
+                scratch.done = true;
             } else {
-                if scratch.prepare_for_exit {
-                    scratch.prepare_for_exit = false;
-                    scratch.done = true;
-                } else {
-                    scratch.prepare_for_exit = true;
-                }
+                scratch.prepare_for_exit = true;
             }
         }
         Transition::Enter { silent, .. } => {
