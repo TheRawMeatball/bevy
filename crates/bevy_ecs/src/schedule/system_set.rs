@@ -2,10 +2,9 @@ use crate::{
     component::Component,
     schedule::{
         AmbiguitySetLabel, BoxedAmbiguitySetLabel, BoxedSystemLabel, IntoRunCriteria,
-        RunCriteriaDescriptorOrLabel, State, SystemDescriptor, SystemLabel,
+        PatternLiteral, RunCriteriaDescriptorOrLabel, State, SystemDescriptor, SystemLabel,
     },
 };
-use std::{fmt::Debug, hash::Hash};
 
 /// A builder for describing several systems at the same time.
 pub struct SystemSet {
@@ -35,53 +34,25 @@ impl SystemSet {
         Default::default()
     }
 
-    pub fn on_update<T>(s: T) -> SystemSet
+    pub fn on_update<T>(s: PatternLiteral<T>) -> SystemSet
     where
-        T: Component + Debug + Clone + Eq + Hash,
+        T: Component + Clone,
     {
         Self::new().with_run_criteria(State::<T>::on_update(s))
     }
 
-    pub fn on_inactive_update<T>(s: T) -> SystemSet
+    pub fn on_enter<T>(s: PatternLiteral<T>) -> SystemSet
     where
-        T: Component + Debug + Clone + Eq + Hash,
-    {
-        Self::new().with_run_criteria(State::<T>::on_inactive_update(s))
-    }
-
-    pub fn on_in_stack_update<T>(s: T) -> SystemSet
-    where
-        T: Component + Debug + Clone + Eq + Hash,
-    {
-        Self::new().with_run_criteria(State::<T>::on_in_stack_update(s))
-    }
-
-    pub fn on_enter<T>(s: T) -> SystemSet
-    where
-        T: Component + Debug + Clone + Eq + Hash,
+        T: Component + Clone,
     {
         Self::new().with_run_criteria(State::<T>::on_enter(s))
     }
 
-    pub fn on_exit<T>(s: T) -> SystemSet
+    pub fn on_exit<T>(s: PatternLiteral<T>) -> SystemSet
     where
-        T: Component + Debug + Clone + Eq + Hash,
+        T: Component + Clone,
     {
         Self::new().with_run_criteria(State::<T>::on_exit(s))
-    }
-
-    pub fn on_pause<T>(s: T) -> SystemSet
-    where
-        T: Component + Debug + Clone + Eq + Hash,
-    {
-        Self::new().with_run_criteria(State::<T>::on_pause(s))
-    }
-
-    pub fn on_resume<T>(s: T) -> SystemSet
-    where
-        T: Component + Debug + Clone + Eq + Hash,
-    {
-        Self::new().with_run_criteria(State::<T>::on_resume(s))
     }
 
     pub fn in_ambiguity_set(mut self, set: impl AmbiguitySetLabel) -> Self {

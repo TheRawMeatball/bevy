@@ -1,10 +1,11 @@
 use crate::Time;
+use bevy_app::EventWriter;
 use bevy_ecs::{
     archetype::{Archetype, ArchetypeComponentId},
-    component::ComponentId,
+    component::{Component, ComponentId},
     query::Access,
-    schedule::ShouldRun,
-    system::{IntoSystem, Local, Res, ResMut, System, SystemId},
+    schedule::{ShouldRun, StateChange},
+    system::{IntoSystem, Local, Required, Res, ResMut, System, SystemId},
     world::World,
 };
 use bevy_utils::HashMap;
@@ -200,4 +201,41 @@ impl System for FixedTimestep {
     fn check_change_tick(&mut self, change_tick: u32) {
         self.internal_system.check_change_tick(change_tick);
     }
+}
+
+pub fn make_ft_system<T: Component + Clone, Dt: Component>(
+    enable: fn(T) -> T,
+    disable: fn(T) -> T,
+    dt: fn(&Dt) -> f64,
+) -> impl System<In = (), Out = ()> {
+    ft_system::<T, Dt>
+        .system()
+        .config(|(v, _, _, _, _)| *v = Some((enable, disable, dt)))
+}
+
+fn ft_system<T: Component + Clone, Dt: Component>(
+    locals: Required<(fn(T) -> T, fn(T) -> T, fn(&Dt) -> f64)>,
+    mut acc: Local<f64>,
+    time: Res<Time>,
+    mut ew: EventWriter<StateChange<T>>,
+    dt: Res<Dt>,
+) {
+    let dt = (locals.2)(&dt);
+    *acc += time.delta_seconds_f64();
+    let t = (*acc % dt) as usize;
+    *acc -= t as f64 * dt;
+    ew.send_batch(
+        std::iter::repeat([
+            StateChange {
+                f: locals.0,
+                silent: false,
+            },
+            StateChange {
+                f: locals.1,
+                silent: true,
+            },
+        ])
+        .take(t)
+        .flatten(),
+    );
 }

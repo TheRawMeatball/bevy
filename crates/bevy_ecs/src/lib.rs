@@ -12,6 +12,13 @@ pub mod storage;
 pub mod system;
 pub mod world;
 
+#[macro_export]
+macro_rules! pattern_literal {
+    ($pat:pat) => {
+        $crate::prelude::PatternLiteral(|val| matches!(val, $pat), stringify!($pat))
+    };
+}
+
 pub mod prelude {
     #[doc(hidden)]
     #[cfg(feature = "bevy_reflect")]
@@ -22,11 +29,13 @@ pub mod prelude {
         change_detection::DetectChanges,
         entity::Entity,
         event::{EventReader, EventWriter},
+        pattern_literal,
         query::{Added, ChangeTrackers, Changed, Or, QueryState, With, WithBundle, Without},
         schedule::{
             AmbiguitySetLabel, ExclusiveSystemDescriptorCoercion, ParallelSystemDescriptorCoercion,
-            RunCriteria, RunCriteriaDescriptorCoercion, RunCriteriaLabel, RunCriteriaPiping,
-            Schedule, Stage, StageLabel, State, SystemLabel, SystemSet, SystemStage,
+            PatternLiteral, RunCriteria, RunCriteriaDescriptorCoercion, RunCriteriaLabel,
+            RunCriteriaPiping, Schedule, Stage, StageLabel, State, StateChange, SystemLabel,
+            SystemSet, SystemStage,
         },
         system::{
             Commands, In, IntoChainSystem, IntoExclusiveSystem, IntoSystem, Local, NonSend,

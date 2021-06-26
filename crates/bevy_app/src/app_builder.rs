@@ -7,13 +7,13 @@ use bevy_ecs::{
     component::{Component, ComponentDescriptor},
     event::Events,
     schedule::{
-        RunOnce, Schedule, Stage, StageLabel, State, SystemDescriptor, SystemSet, SystemStage,
+        RunCriteriaDescriptor, RunOnce, Schedule, Stage, StageLabel, State, StateChange,
+        SystemDescriptor, SystemSet, SystemStage,
     },
     system::{IntoExclusiveSystem, IntoSystem},
     world::{FromWorld, World},
 };
 use bevy_utils::tracing::debug;
-use std::{fmt::Debug, hash::Hash};
 
 /// Configure [App]s using the builder pattern
 pub struct AppBuilder {
@@ -245,6 +245,23 @@ impl AppBuilder {
         self
     }
 
+    pub fn add_system_run_criteria(&mut self, run_criteria: RunCriteriaDescriptor) -> &mut Self {
+        self.add_system_run_criteria_to_stage(CoreStage::Update, run_criteria)
+    }
+
+    pub fn add_system_run_criteria_to_stage(
+        &mut self,
+        stage_label: impl StageLabel,
+        run_criteria: RunCriteriaDescriptor,
+    ) -> &mut Self {
+        self.app
+            .schedule
+            .stage(stage_label, |stage: &mut SystemStage| {
+                stage.add_system_run_criteria(run_criteria)
+            });
+        self
+    }
+
     /// Adds a new [State] with the given `initial` value.
     /// This inserts a new `State<T>` resource and adds a new "driver" to [CoreStage::Update].
     /// Each stage that uses `State<T>` for system run criteria needs a driver. If you need to use
@@ -252,7 +269,7 @@ impl AppBuilder {
     /// adding [State::get_driver] to additional stages you need it in.
     pub fn add_state<T>(&mut self, initial: T) -> &mut Self
     where
-        T: Component + Debug + Clone + Eq + Hash,
+        T: Component + Clone,
     {
         self.add_state_to_stage(CoreStage::Update, initial)
     }
@@ -264,10 +281,13 @@ impl AppBuilder {
     /// stages you need it in.
     pub fn add_state_to_stage<T>(&mut self, stage: impl StageLabel, initial: T) -> &mut Self
     where
-        T: Component + Debug + Clone + Eq + Hash,
+        T: Component + Clone,
     {
-        self.insert_resource(State::new(initial))
-            .add_system_set_to_stage(stage, State::<T>::get_driver())
+        let (state, scratch) = State::new(initial);
+        self.insert_resource(state)
+            .insert_resource(scratch)
+            .add_event::<StateChange<T>>()
+            .add_system_run_criteria_to_stage(stage, State::<T>::get_driver())
     }
 
     pub fn add_default_stages(&mut self) -> &mut Self {

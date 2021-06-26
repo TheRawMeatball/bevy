@@ -7,12 +7,12 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .init_resource::<ButtonMaterials>()
         .add_state(AppState::Menu)
-        .add_system_set(SystemSet::on_enter(AppState::Menu).with_system(setup_menu.system()))
-        .add_system_set(SystemSet::on_update(AppState::Menu).with_system(menu.system()))
-        .add_system_set(SystemSet::on_exit(AppState::Menu).with_system(cleanup_menu.system()))
-        .add_system_set(SystemSet::on_enter(AppState::InGame).with_system(setup_game.system()))
+        .add_system_set(SystemSet::on_enter(AppState::MENU).with_system(setup_menu.system()))
+        .add_system_set(SystemSet::on_update(AppState::MENU).with_system(menu.system()))
+        .add_system_set(SystemSet::on_exit(AppState::MENU).with_system(cleanup_menu.system()))
+        .add_system_set(SystemSet::on_enter(AppState::IN_GAME).with_system(setup_game.system()))
         .add_system_set(
-            SystemSet::on_update(AppState::InGame)
+            SystemSet::on_update(AppState::IN_GAME)
                 .with_system(movement.system())
                 .with_system(change_color.system()),
         )
@@ -23,6 +23,11 @@ fn main() {
 enum AppState {
     Menu,
     InGame,
+}
+
+impl AppState {
+    const MENU: PatternLiteral<Self> = pattern_literal!(AppState::Menu);
+    const IN_GAME: PatternLiteral<Self> = pattern_literal!(AppState::InGame);
 }
 
 struct MenuData {
@@ -70,7 +75,7 @@ fn setup_menu(
 }
 
 fn menu(
-    mut state: ResMut<State<AppState>>,
+    mut state: EventWriter<StateChange<AppState>>,
     button_materials: Res<ButtonMaterials>,
     mut interaction_query: Query<
         (&Interaction, &mut Handle<ColorMaterial>),
@@ -81,7 +86,7 @@ fn menu(
         match *interaction {
             Interaction::Clicked => {
                 *material = button_materials.pressed.clone();
-                state.set(AppState::InGame).unwrap();
+                state.send(StateChange::to(|_| AppState::InGame));
             }
             Interaction::Hovered => {
                 *material = button_materials.hovered.clone();

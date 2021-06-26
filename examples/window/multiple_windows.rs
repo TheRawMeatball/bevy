@@ -19,9 +19,9 @@ fn main() {
         .add_state(AppState::CreateWindow)
         .add_plugins(DefaultPlugins)
         .add_system_set(
-            SystemSet::on_update(AppState::CreateWindow).with_system(setup_window.system()),
+            SystemSet::on_update(AppState::CREATE_WINDOW).with_system(setup_window.system()),
         )
-        .add_system_set(SystemSet::on_update(AppState::Setup).with_system(setup_pipeline.system()))
+        .add_system_set(SystemSet::on_update(AppState::SETUP).with_system(setup_pipeline.system()))
         .run();
 }
 
@@ -34,8 +34,14 @@ enum AppState {
     Done,
 }
 
+impl AppState {
+    const CREATE_WINDOW: PatternLiteral<Self> = pattern_literal!(Self::CreateWindow);
+    const SETUP: PatternLiteral<Self> = pattern_literal!(Self::Setup);
+    // const DONE: PatternLiteral<Self> = pattern_literal!(Self::Done);
+}
+
 fn setup_window(
-    mut app_state: ResMut<State<AppState>>,
+    mut app_state: EventWriter<StateChange<AppState>>,
     mut create_window_events: EventWriter<CreateWindow>,
 ) {
     let window_id = WindowId::new();
@@ -52,7 +58,7 @@ fn setup_window(
         },
     });
 
-    app_state.set(AppState::Setup).unwrap();
+    app_state.send(StateChange::to(|_| AppState::Setup));
 }
 
 fn setup_pipeline(
@@ -62,7 +68,7 @@ fn setup_pipeline(
     mut render_graph: ResMut<RenderGraph>,
     asset_server: Res<AssetServer>,
     msaa: Res<Msaa>,
-    mut app_state: ResMut<State<AppState>>,
+    mut app_state: EventWriter<StateChange<AppState>>,
 ) {
     // get the non-default window id
     let window_id = windows
@@ -207,5 +213,5 @@ fn setup_pipeline(
         ..Default::default()
     });
 
-    app_state.set(AppState::Done).unwrap();
+    app_state.send(StateChange::to(|_| AppState::Done));
 }

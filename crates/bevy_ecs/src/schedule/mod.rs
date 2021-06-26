@@ -5,7 +5,6 @@ mod label;
 mod run_criteria;
 mod stage;
 mod state;
-mod statev3;
 mod system_container;
 mod system_descriptor;
 mod system_set;

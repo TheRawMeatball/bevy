@@ -1,5 +1,5 @@
 use bevy::{
-    core::FixedTimestep,
+    core::make_ft_system,
     ecs::schedule::SystemSet,
     prelude::*,
     render::{camera::Camera, render_graph::base::camera::CAMERA_3D},
@@ -8,8 +8,19 @@ use rand::Rng;
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 enum GameState {
-    Playing,
+    Playing { fixed_timestep: bool },
     GameOver,
+}
+
+impl GameState {
+    const PLAYING_EE: PatternLiteral<Self> = pattern_literal!(Self::Playing { .. });
+    const PLAYING: PatternLiteral<Self> = pattern_literal!(Self::Playing {
+        fixed_timestep: false
+    });
+    const PLAYING_FT: PatternLiteral<Self> = pattern_literal!(Self::Playing {
+        fixed_timestep: true
+    });
+    const GAME_OVER: PatternLiteral<Self> = pattern_literal!(Self::GameOver);
 }
 
 fn main() {
@@ -17,28 +28,37 @@ fn main() {
         .insert_resource(Msaa { samples: 4 })
         .init_resource::<Game>()
         .add_plugins(DefaultPlugins)
-        .add_state(GameState::Playing)
+        .add_state(GameState::Playing {
+            fixed_timestep: false,
+        })
         .add_startup_system(setup_cameras.system())
-        .add_system_set(SystemSet::on_enter(GameState::Playing).with_system(setup.system()))
+        .add_system_set(SystemSet::on_enter(GameState::PLAYING_EE).with_system(setup.system()))
         .add_system_set(
-            SystemSet::on_update(GameState::Playing)
+            SystemSet::on_update(GameState::PLAYING)
+                .with_system(make_ft_system(
+                    |_| GameState::Playing {
+                        fixed_timestep: true,
+                    },
+                    |_| GameState::Playing {
+                        fixed_timestep: false,
+                    },
+                    |_: &Game| 5.0,
+                ))
                 .with_system(move_player.system())
                 .with_system(focus_camera.system())
                 .with_system(rotate_bonus.system())
                 .with_system(scoreboard_system.system()),
         )
-        .add_system_set(SystemSet::on_exit(GameState::Playing).with_system(teardown.system()))
+        .add_system_set(SystemSet::on_exit(GameState::PLAYING_EE).with_system(teardown.system()))
         .add_system_set(
-            SystemSet::on_enter(GameState::GameOver).with_system(display_score.system()),
+            SystemSet::on_enter(GameState::GAME_OVER).with_system(display_score.system()),
         )
         .add_system_set(
-            SystemSet::on_update(GameState::GameOver).with_system(gameover_keyboard.system()),
+            SystemSet::on_update(GameState::GAME_OVER).with_system(gameover_keyboard.system()),
         )
-        .add_system_set(SystemSet::on_exit(GameState::GameOver).with_system(teardown.system()))
+        .add_system_set(SystemSet::on_exit(GameState::GAME_OVER).with_system(teardown.system()))
         .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(5.0))
-                .with_system(spawn_bonus.system()),
+            SystemSet::on_update(GameState::PLAYING_FT).with_system(spawn_bonus.system()),
         )
         .add_system(bevy::input::system::exit_on_esc_system.system())
         .run();
@@ -293,19 +313,16 @@ fn focus_camera(
 
 // despawn the bonus if there is one, then spawn a new one at a random location
 fn spawn_bonus(
-    mut state: ResMut<State<GameState>>,
+    mut state: EventWriter<StateChange<GameState>>,
     mut commands: Commands,
     mut game: ResMut<Game>,
 ) {
-    if *state.current() != GameState::Playing {
-        return;
-    }
     if let Some(entity) = game.bonus.entity {
         game.score -= 3;
         commands.entity(entity).despawn_recursive();
         game.bonus.entity = None;
         if game.score <= -5 {
-            state.set(GameState::GameOver).unwrap();
+            state.send(StateChange::to(|_| GameState::GameOver));
             return;
         }
     }
@@ -357,9 +374,14 @@ fn scoreboard_system(game: Res<Game>, mut query: Query<&mut Text>) {
 }
 
 // restart the game when pressing spacebar
-fn gameover_keyboard(mut state: ResMut<State<GameState>>, keyboard_input: Res<Input<KeyCode>>) {
+fn gameover_keyboard(
+    mut state: EventWriter<StateChange<GameState>>,
+    keyboard_input: Res<Input<KeyCode>>,
+) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        state.set(GameState::Playing).unwrap();
+        state.send(StateChange::to(|_| GameState::Playing {
+            fixed_timestep: false,
+        }));
     }
 }
 

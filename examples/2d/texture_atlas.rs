@@ -1,4 +1,12 @@
-use bevy::{asset::LoadState, prelude::*, sprite::TextureAtlasBuilder};
+use bevy::{
+    asset::LoadState,
+    ecs::{
+        pattern_literal,
+        schedule::{PatternLiteral, StateChange},
+    },
+    prelude::*,
+    sprite::TextureAtlasBuilder,
+};
 
 /// In this example we generate a new texture atlas (sprite sheet) from a folder containing
 /// individual sprites
@@ -7,16 +15,21 @@ fn main() {
         .init_resource::<RpgSpriteHandles>()
         .add_plugins(DefaultPlugins)
         .add_state(AppState::Setup)
-        .add_system_set(SystemSet::on_enter(AppState::Setup).with_system(load_textures.system()))
-        .add_system_set(SystemSet::on_update(AppState::Setup).with_system(check_textures.system()))
-        .add_system_set(SystemSet::on_enter(AppState::Finished).with_system(setup.system()))
+        .add_system_set(SystemSet::on_enter(AppState::SETUP).with_system(load_textures.system()))
+        .add_system_set(SystemSet::on_update(AppState::SETUP).with_system(check_textures.system()))
+        .add_system_set(SystemSet::on_enter(AppState::FINISHED).with_system(setup.system()))
         .run();
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy)]
 enum AppState {
     Setup,
     Finished,
+}
+
+impl AppState {
+    const SETUP: PatternLiteral<Self> = pattern_literal!(AppState::Setup);
+    const FINISHED: PatternLiteral<Self> = pattern_literal!(AppState::Finished);
 }
 
 #[derive(Default)]
@@ -29,14 +42,14 @@ fn load_textures(mut rpg_sprite_handles: ResMut<RpgSpriteHandles>, asset_server:
 }
 
 fn check_textures(
-    mut state: ResMut<State<AppState>>,
+    mut state: EventWriter<StateChange<AppState>>,
     rpg_sprite_handles: ResMut<RpgSpriteHandles>,
     asset_server: Res<AssetServer>,
 ) {
     if let LoadState::Loaded =
         asset_server.get_group_load_state(rpg_sprite_handles.handles.iter().map(|handle| handle.id))
     {
-        state.set(AppState::Finished).unwrap();
+        state.send(StateChange::to(|_| AppState::Finished));
     }
 }
 
