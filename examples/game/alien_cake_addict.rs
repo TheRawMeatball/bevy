@@ -36,10 +36,10 @@ fn main() {
         .add_system_set(
             SystemSet::on_update(GameState::PLAYING)
                 .with_system(make_ft_system(
-                    |_| GameState::Playing {
+                    GameState::Playing {
                         fixed_timestep: true,
                     },
-                    |_| GameState::Playing {
+                    GameState::Playing {
                         fixed_timestep: false,
                     },
                     |_: &Game| 5.0,
@@ -322,7 +322,7 @@ fn spawn_bonus(
         commands.entity(entity).despawn_recursive();
         game.bonus.entity = None;
         if game.score <= -5 {
-            state.send(StateChange::to(|_| GameState::GameOver));
+            state.send(StateChange::to(GameState::GameOver));
             return;
         }
     }
@@ -379,7 +379,7 @@ fn gameover_keyboard(
     keyboard_input: Res<Input<KeyCode>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        state.send(StateChange::to(|_| GameState::Playing {
+        state.send(StateChange::to(GameState::Playing {
             fixed_timestep: false,
         }));
     }

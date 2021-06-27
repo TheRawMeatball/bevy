@@ -204,8 +204,8 @@ impl System for FixedTimestep {
 }
 
 pub fn make_ft_system<T: Component + Clone, Dt: Component>(
-    enable: fn(T) -> T,
-    disable: fn(T) -> T,
+    enable: T,
+    disable: T,
     dt: fn(&Dt) -> f64,
 ) -> impl System<In = (), Out = ()> {
     ft_system::<T, Dt>
@@ -214,7 +214,7 @@ pub fn make_ft_system<T: Component + Clone, Dt: Component>(
 }
 
 fn ft_system<T: Component + Clone, Dt: Component>(
-    locals: Required<(fn(T) -> T, fn(T) -> T, fn(&Dt) -> f64)>,
+    locals: Required<(T, T, fn(&Dt) -> f64)>,
     mut acc: Local<f64>,
     time: Res<Time>,
     mut ew: EventWriter<StateChange<T>>,
@@ -227,12 +227,12 @@ fn ft_system<T: Component + Clone, Dt: Component>(
     ew.send_batch(
         std::iter::repeat([
             StateChange {
-                f: locals.0,
-                silent: false,
+                v: locals.0.clone(),
+                update_same_frame: false,
             },
             StateChange {
-                f: locals.1,
-                silent: true,
+                v: locals.1.clone(),
+                update_same_frame: true,
             },
         ])
         .take(t)

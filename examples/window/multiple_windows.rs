@@ -58,7 +58,7 @@ fn setup_window(
         },
     });
 
-    app_state.send(StateChange::to(|_| AppState::Setup));
+    app_state.send(StateChange::to(AppState::Setup));
 }
 
 fn setup_pipeline(
@@ -213,5 +213,5 @@ fn setup_pipeline(
         ..Default::default()
     });
 
-    app_state.send(StateChange::to(|_| AppState::Done));
+    app_state.send(StateChange::to(AppState::Done));
 }

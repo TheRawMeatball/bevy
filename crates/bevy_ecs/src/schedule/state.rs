@@ -50,12 +50,15 @@ impl<T: Component + Clone> State<T> {
 }
 #[derive(Clone, Copy)]
 pub struct StateChange<T: Component + Clone> {
-    pub f: fn(T) -> T,
-    pub silent: bool,
+    pub v: T,
+    pub update_same_frame: bool,
 }
 impl<T: Component + Clone> StateChange<T> {
-    pub fn to(f: fn(T) -> T) -> Self {
-        Self { f, silent: false }
+    pub fn to(v: T) -> Self {
+        Self {
+            v,
+            update_same_frame: false,
+        }
     }
 }
 
@@ -68,10 +71,20 @@ pub struct StateScratchSpace<T: Component + Clone> {
 
 enum Transition<T> {
     None,
-    Enter { exiting: T, silent: bool },
-    Exit { entering: T, silent: bool },
-    InitializeRequest { initial: T },
-    Initialize { initial: T },
+    Enter {
+        exiting: T,
+        update_same_frame: bool,
+    },
+    Exit {
+        entering: T,
+        update_same_frame: bool,
+    },
+    InitializeRequest {
+        initial: T,
+    },
+    Initialize {
+        initial: T,
+    },
 }
 
 impl<T> Transition<T> {
@@ -175,8 +188,8 @@ fn state_driver<T: Component + Clone>(
         Transition::None => {
             if let Some(next) = er.iter().next() {
                 scratch.transition = Transition::Exit {
-                    entering: (next.f)(state.current.as_ref().unwrap().clone()),
-                    silent: next.silent,
+                    entering: next.v.clone(),
+                    update_same_frame: next.update_same_frame,
                 }
             } else if scratch.done {
                 scratch.done = false;
@@ -188,26 +201,31 @@ fn state_driver<T: Component + Clone>(
                 scratch.prepare_for_exit = true;
             }
         }
-        Transition::Enter { silent, .. } => {
+        Transition::Enter {
+            update_same_frame, ..
+        } => {
             scratch.prepare_for_exit = true;
-            if silent {
+            if !update_same_frame {
                 return state_driver(state, scratch, er);
             }
             scratch.transition = Transition::None;
         }
-        Transition::Exit { entering, silent } => {
+        Transition::Exit {
+            entering,
+            update_same_frame,
+        } => {
             scratch.prepare_for_exit = false;
             scratch.transition = Transition::Enter {
                 exiting: std::mem::replace(&mut state.current.as_mut().unwrap(), entering),
-                silent,
+                update_same_frame,
             };
         }
-        Transition::Initialize { initial: first } => {
+        Transition::Initialize { initial } => {
             scratch.transition = Transition::None;
-            state.current = Some(first);
+            state.current = Some(initial);
         }
-        Transition::InitializeRequest { initial: first } => {
-            scratch.transition = Transition::Initialize { initial: first };
+        Transition::InitializeRequest { initial } => {
+            scratch.transition = Transition::Initialize { initial };
         }
     }
 
@@ -285,10 +303,7 @@ mod test {
         stage.add_system(
             (|mut er: EventWriter<StateChange<SimpleState>>| {
                 println!("Updating SimpleState::B");
-                er.send(StateChange {
-                    f: |_| SimpleState::C,
-                    silent: false,
-                });
+                er.send(StateChange::to(SimpleState::C));
             })
             .system()
             .with_run_criteria(State::on_update(SimpleState::IN_B)),
@@ -301,10 +316,7 @@ mod test {
         stage.add_system(
             (|mut ew: EventWriter<StateChange<SimpleState>>| {
                 println!("Entering SimpleState::C");
-                ew.send(StateChange {
-                    f: |_| SimpleState::D(false),
-                    silent: false,
-                })
+                ew.send(StateChange::to(SimpleState::D(false)))
             })
             .system()
             .with_run_criteria(State::on_enter(SimpleState::IN_C)),
@@ -340,12 +352,12 @@ mod test {
                             *acc -= DT;
                             ew.send_batch([
                                 StateChange {
-                                    f: |_| SimpleState::D(true),
-                                    silent: false,
+                                    v: SimpleState::D(true),
+                                    update_same_frame: true,
                                 },
                                 StateChange {
-                                    f: |_| SimpleState::D(false),
-                                    silent: true,
+                                    v: SimpleState::D(false),
+                                    update_same_frame: false,
                                 },
                             ])
                         }
@@ -371,19 +383,13 @@ mod test {
         world
             .get_resource_mut::<Events<StateChange<SimpleState>>>()
             .unwrap()
-            .send(StateChange {
-                f: |_| SimpleState::B,
-                silent: false,
-            });
+            .send(StateChange::to(SimpleState::B));
         stage.run(&mut world);
         dbg!("third run done!");
         world
             .get_resource_mut::<Events<StateChange<SimpleState>>>()
             .unwrap()
-            .send(StateChange {
-                f: |_| SimpleState::D(false),
-                silent: false,
-            });
+            .send(StateChange::to(SimpleState::D(false)));
         println!("start many runs");
         for i in 4..14 {
             stage.run(&mut world);
