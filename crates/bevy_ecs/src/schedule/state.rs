@@ -221,6 +221,7 @@ fn state_driver<T: Component + Clone>(
             };
         }
         Transition::Initialize { initial } => {
+            scratch.prepare_for_exit = true;
             scratch.transition = Transition::None;
             state.current = Some(initial);
         }
@@ -269,6 +270,18 @@ mod test {
         const IN_D_FT: PatternLiteral<Self> = pattern_literal!(Self::D(true));
     }
 
+    macro_rules! make_system {
+        ($s:literal) => {
+            (|mut v: ResMut<Vec<&'static str>>| v.push($s))
+        };
+        ($s:literal, $e:expr) => {
+            (|mut v: ResMut<Vec<&'static str>>, mut er: EventWriter<StateChange<SimpleState>>| {
+                v.push($s);
+                er.send(StateChange::to($e));
+            })
+        };
+    }
+
     #[test]
     fn simple_state() {
         let mut world = World::new();
@@ -276,63 +289,58 @@ mod test {
         let (state, scratch) = State::new(SimpleState::A);
         world.insert_resource(state);
         world.insert_resource(scratch);
+        world.insert_resource(Vec::<&'static str>::new());
 
         let mut stage = SystemStage::parallel();
 
         stage.add_system_run_criteria(State::<SimpleState>::get_driver());
         stage.add_system(
-            (|| println!("Entering SimpleState::A"))
+            make_system!("Entering SimpleState::A")
                 .system()
                 .with_run_criteria(State::on_enter(SimpleState::IN_A)),
         );
         stage.add_system(
-            (|| println!("Updating SimpleState::A"))
+            make_system!("Updating SimpleState::A")
                 .system()
                 .with_run_criteria(State::on_update(SimpleState::IN_A)),
         );
         stage.add_system(
-            (|| println!("Exiting SimpleState::A"))
+            make_system!("Exiting SimpleState::A")
                 .system()
                 .with_run_criteria(State::on_exit(SimpleState::IN_A)),
         );
         stage.add_system(
-            (|| println!("Entering SimpleState::B"))
+            make_system!("Entering SimpleState::B")
                 .system()
                 .with_run_criteria(State::on_enter(SimpleState::IN_B)),
         );
         stage.add_system(
-            (|mut er: EventWriter<StateChange<SimpleState>>| {
-                println!("Updating SimpleState::B");
-                er.send(StateChange::to(SimpleState::C));
-            })
-            .system()
-            .with_run_criteria(State::on_update(SimpleState::IN_B)),
+            make_system!("Updating SimpleState::B", SimpleState::C)
+                .system()
+                .with_run_criteria(State::on_update(SimpleState::IN_B)),
         );
         stage.add_system(
-            (|| println!("Exiting SimpleState::B"))
+            make_system!("Exiting SimpleState::B")
                 .system()
                 .with_run_criteria(State::on_exit(SimpleState::IN_B)),
         );
         stage.add_system(
-            (|mut ew: EventWriter<StateChange<SimpleState>>| {
-                println!("Entering SimpleState::C");
-                ew.send(StateChange::to(SimpleState::D(false)))
-            })
-            .system()
-            .with_run_criteria(State::on_enter(SimpleState::IN_C)),
+            make_system!("Entering SimpleState::C", SimpleState::D(false))
+                .system()
+                .with_run_criteria(State::on_enter(SimpleState::IN_C)),
         );
         stage.add_system(
-            (|| println!("Updating SimpleState::C"))
+            make_system!("Updating SimpleState::C")
                 .system()
                 .with_run_criteria(State::on_update(SimpleState::IN_C)),
         );
         stage.add_system(
-            (|| println!("Exiting SimpleState::C"))
+            make_system!("Exiting SimpleState::C")
                 .system()
                 .with_run_criteria(State::on_exit(SimpleState::IN_C)),
         );
         stage.add_system(
-            (|| println!("Entering SimpleState::D"))
+            make_system!("Entering SimpleState::D")
                 .system()
                 .with_run_criteria(State::on_enter(SimpleState::ANY_D)),
         );
@@ -340,7 +348,7 @@ mod test {
             SystemSet::new()
                 .with_run_criteria(State::on_update(SimpleState::IN_D))
                 .with_system(
-                    (|| println!("Updating SimpleState::D"))
+                    make_system!("Updating SimpleState::D")
                         .system()
                         .before("ft"),
                 )
@@ -367,33 +375,57 @@ mod test {
                 ),
         );
         stage.add_system(
-            (|| println!("Fixed Updating SimpleState::D"))
+            make_system!("Fixed Updating SimpleState::D")
                 .system()
                 .with_run_criteria(State::on_update(SimpleState::IN_D_FT)),
         );
         stage.add_system(
-            (|| println!("Exiting SimpleState::D"))
+            make_system!("Exiting SimpleState::D")
                 .system()
                 .with_run_criteria(State::on_exit(SimpleState::ANY_D)),
         );
         stage.run(&mut world);
-        dbg!("first run done!");
+        let marks = std::mem::take(&mut *world.get_resource_mut::<Vec<&'static str>>().unwrap());
+        assert_eq!(
+            marks,
+            ["Entering SimpleState::A", "Updating SimpleState::A"]
+        );
         stage.run(&mut world);
-        dbg!("second run done!");
+        let marks = std::mem::take(&mut *world.get_resource_mut::<Vec<&'static str>>().unwrap());
+        assert_eq!(marks, ["Updating SimpleState::A"]);
         world
             .get_resource_mut::<Events<StateChange<SimpleState>>>()
             .unwrap()
             .send(StateChange::to(SimpleState::B));
         stage.run(&mut world);
-        dbg!("third run done!");
+        let marks = std::mem::take(&mut *world.get_resource_mut::<Vec<&'static str>>().unwrap());
+        assert_eq!(marks, ["Exiting SimpleState::A", "Entering SimpleState::B"]);
         world
             .get_resource_mut::<Events<StateChange<SimpleState>>>()
             .unwrap()
             .send(StateChange::to(SimpleState::D(false)));
-        println!("start many runs");
-        for i in 4..14 {
+        for _ in 0..10 {
             stage.run(&mut world);
-            println!("{}th run done", i)
         }
+        let marks = std::mem::take(&mut *world.get_resource_mut::<Vec<&'static str>>().unwrap());
+        assert_eq!(
+            marks,
+            [
+                "Exiting SimpleState::B",
+                "Entering SimpleState::D",
+                "Updating SimpleState::D",
+                "Updating SimpleState::D",
+                "Updating SimpleState::D",
+                "Fixed Updating SimpleState::D",
+                "Updating SimpleState::D",
+                "Updating SimpleState::D",
+                "Updating SimpleState::D",
+                "Fixed Updating SimpleState::D",
+                "Updating SimpleState::D",
+                "Updating SimpleState::D",
+                "Updating SimpleState::D",
+                "Fixed Updating SimpleState::D"
+            ]
+        );
     }
 }
