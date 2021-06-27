@@ -118,7 +118,7 @@ impl<T: Component> Copy for DriverLabel<T> {}
 
 impl<T: Component> RunCriteriaLabel for DriverLabel<T> {
     fn dyn_clone(&self) -> Box<dyn RunCriteriaLabel> {
-        Box::new(self.clone())
+        Box::new(*self)
     }
 }
 
