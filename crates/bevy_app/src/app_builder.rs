@@ -7,8 +7,8 @@ use bevy_ecs::{
     component::{Component, ComponentDescriptor},
     event::Events,
     schedule::{
-        RunCriteriaDescriptor, RunOnce, Schedule, Stage, StageLabel, State, StateChange,
-        SystemDescriptor, SystemSet, SystemStage,
+        IntoSystemDescriptor, RunCriteriaDescriptor, RunOnce, Schedule, Stage, StageLabel, State,
+        StateChange, SystemSet, SystemStage,
     },
     system::{IntoExclusiveSystem, IntoSystem},
     world::{FromWorld, World},
@@ -180,7 +180,7 @@ impl AppBuilder {
     /// App::build()
     ///     .add_system(my_system.system());
     /// ```
-    pub fn add_system(&mut self, system: impl Into<SystemDescriptor>) -> &mut Self {
+    pub fn add_system<Params>(&mut self, system: impl IntoSystemDescriptor<Params>) -> &mut Self {
         self.add_system_to_stage(CoreStage::Update, system)
     }
 
@@ -188,10 +188,10 @@ impl AppBuilder {
         self.add_system_set_to_stage(CoreStage::Update, system_set)
     }
 
-    pub fn add_system_to_stage(
+    pub fn add_system_to_stage<Params>(
         &mut self,
         stage_label: impl StageLabel,
-        system: impl Into<SystemDescriptor>,
+        system: impl IntoSystemDescriptor<Params>,
     ) -> &mut Self {
         self.app.schedule.add_system_to_stage(stage_label, system);
         self
@@ -228,14 +228,21 @@ impl AppBuilder {
     /// App::build()
     ///     .add_startup_system(my_startup_system.system());
     /// ```
-    pub fn add_startup_system(&mut self, system: impl Into<SystemDescriptor>) -> &mut Self {
+    pub fn add_startup_system<Params>(
+        &mut self,
+        system: impl IntoSystemDescriptor<Params>,
+    ) -> &mut Self {
         self.add_startup_system_to_stage(StartupStage::Startup, system)
     }
 
-    pub fn add_startup_system_to_stage(
+    pub fn add_startup_system_set(&mut self, system_set: SystemSet) -> &mut Self {
+        self.add_startup_system_set_to_stage(StartupStage::Startup, system_set)
+    }
+
+    pub fn add_startup_system_to_stage<Params>(
         &mut self,
         stage_label: impl StageLabel,
-        system: impl Into<SystemDescriptor>,
+        system: impl IntoSystemDescriptor<Params>,
     ) -> &mut Self {
         self.app
             .schedule
@@ -258,6 +265,18 @@ impl AppBuilder {
             .schedule
             .stage(stage_label, |stage: &mut SystemStage| {
                 stage.add_system_run_criteria(run_criteria)
+            });
+        self
+    }
+    pub fn add_startup_system_set_to_stage(
+        &mut self,
+        stage_label: impl StageLabel,
+        system_set: SystemSet,
+    ) -> &mut Self {
+        self.app
+            .schedule
+            .stage(CoreStage::Startup, |schedule: &mut Schedule| {
+                schedule.add_system_set_to_stage(stage_label, system_set)
             });
         self
     }

@@ -6,6 +6,8 @@ use crate::{
     },
 };
 
+use super::IntoSystemDescriptor;
+
 /// A builder for describing several systems at the same time.
 pub struct SystemSet {
     pub(crate) systems: Vec<SystemDescriptor>,
@@ -60,8 +62,8 @@ impl SystemSet {
         self
     }
 
-    pub fn with_system(mut self, system: impl Into<SystemDescriptor>) -> Self {
-        self.systems.push(system.into());
+    pub fn with_system<Params>(mut self, system: impl IntoSystemDescriptor<Params>) -> Self {
+        self.systems.push(system.into_descriptor());
         self
     }
 
