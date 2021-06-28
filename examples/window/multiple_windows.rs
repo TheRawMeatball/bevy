@@ -41,7 +41,7 @@ impl AppState {
 }
 
 fn setup_window(
-    mut app_state: EventWriter<StateChange<AppState>>,
+    mut tm: TransitionManager<AppState>,
     mut create_window_events: EventWriter<CreateWindow>,
 ) {
     let window_id = WindowId::new();
@@ -58,7 +58,7 @@ fn setup_window(
         },
     });
 
-    app_state.send(StateChange::to(AppState::Setup));
+    tm.schedule(AppState::Setup);
 }
 
 fn setup_pipeline(
@@ -68,7 +68,7 @@ fn setup_pipeline(
     mut render_graph: ResMut<RenderGraph>,
     asset_server: Res<AssetServer>,
     msaa: Res<Msaa>,
-    mut app_state: EventWriter<StateChange<AppState>>,
+    mut tm: TransitionManager<AppState>,
 ) {
     // get the non-default window id
     let window_id = windows
@@ -213,5 +213,5 @@ fn setup_pipeline(
         ..Default::default()
     });
 
-    app_state.send(StateChange::to(AppState::Done));
+    tm.schedule(AppState::Done);
 }

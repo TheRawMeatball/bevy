@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -6,8 +7,8 @@ use super::{RunCriteriaDescriptor, RunCriteriaDescriptorCoercion, ShouldRun};
 use crate::schedule::label::RunCriteriaLabel;
 use crate::{
     component::Component,
-    prelude::{EventReader, In, IntoChainSystem, IntoSystem, Res, ResMut},
-    system::Required,
+    prelude::{In, IntoChainSystem, IntoSystem, Res, ResMut},
+    system::{Required, SystemParam},
 };
 
 #[derive(Clone, Copy)]
@@ -44,6 +45,7 @@ impl<T: Component + Clone> State<T> {
                 prepare_for_exit: false,
                 done: false,
                 transition: Transition::InitializeRequest { initial },
+                transition_queue: Default::default(),
             },
         )
     }
@@ -53,19 +55,12 @@ pub struct StateChange<T: Component + Clone> {
     pub v: T,
     pub update_same_frame: bool,
 }
-impl<T: Component + Clone> StateChange<T> {
-    pub fn to(v: T) -> Self {
-        Self {
-            v,
-            update_same_frame: false,
-        }
-    }
-}
 
 pub struct StateScratchSpace<T: Component + Clone> {
     _marker: PhantomData<T>,
     prepare_for_exit: bool,
     done: bool,
+    transition_queue: VecDeque<StateChange<T>>,
     transition: Transition<T>,
 }
 
@@ -182,11 +177,10 @@ impl<T: Component + Clone> State<T> {
 fn state_driver<T: Component + Clone>(
     mut state: ResMut<State<T>>,
     mut scratch: ResMut<StateScratchSpace<T>>,
-    mut er: EventReader<StateChange<T>>,
 ) -> ShouldRun {
     match scratch.transition.take() {
         Transition::None => {
-            if let Some(next) = er.iter().next() {
+            if let Some(next) = scratch.transition_queue.pop_front() {
                 scratch.transition = Transition::Exit {
                     entering: next.v.clone(),
                     update_same_frame: next.update_same_frame,
@@ -206,7 +200,7 @@ fn state_driver<T: Component + Clone>(
         } => {
             scratch.prepare_for_exit = true;
             if !update_same_frame {
-                return state_driver(state, scratch, er);
+                return state_driver(state, scratch);
             }
             scratch.transition = Transition::None;
         }
@@ -247,9 +241,40 @@ fn should_run_adapter<T: Component + Clone>(
     }
 }
 
+use crate as bevy_ecs; // required for the derive
+#[derive(SystemParam)]
+pub struct TransitionManager<'a, T: Component + Clone> {
+    state: Res<'a, State<T>>,
+    scratch: ResMut<'a, StateScratchSpace<T>>,
+}
+
+impl<'a, T: Component + Clone> TransitionManager<'a, T> {
+    pub fn latest(&self) -> &T {
+        self.scratch
+            .transition_queue
+            .back()
+            .map(|v| &v.v)
+            .unwrap_or_else(|| self.state.current.as_ref().unwrap())
+    }
+
+    pub fn schedule(&mut self, v: T) {
+        self.scratch.transition_queue.push_back(StateChange {
+            v,
+            update_same_frame: false,
+        });
+    }
+
+    pub fn schedule_update_same_frame(&mut self, v: T) {
+        self.scratch.transition_queue.push_back(StateChange {
+            v,
+            update_same_frame: true,
+        });
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::{event::Events, prelude::*};
+    use crate::prelude::*;
 
     use super::*;
 
@@ -275,9 +300,9 @@ mod test {
             (|mut v: ResMut<Vec<&'static str>>| v.push($s))
         };
         ($s:literal, $e:expr) => {
-            (|mut v: ResMut<Vec<&'static str>>, mut er: EventWriter<StateChange<SimpleState>>| {
+            (|mut v: ResMut<Vec<&'static str>>, mut tm: TransitionManager<SimpleState>| {
                 v.push($s);
-                er.send(StateChange::to($e));
+                tm.schedule($e);
             })
         };
     }
@@ -285,7 +310,6 @@ mod test {
     #[test]
     fn simple_state() {
         let mut world = World::new();
-        world.insert_resource(Events::<StateChange<SimpleState>>::default());
         let (state, scratch) = State::new(SimpleState::A);
         world.insert_resource(state);
         world.insert_resource(scratch);
@@ -353,21 +377,13 @@ mod test {
                         .before("ft"),
                 )
                 .with_system(
-                    (|mut acc: Local<usize>, mut ew: EventWriter<StateChange<SimpleState>>| {
+                    (|mut acc: Local<usize>, mut tm: TransitionManager<SimpleState>| {
                         const DT: usize = 3;
                         *acc += 1;
                         if *acc >= DT {
                             *acc -= DT;
-                            ew.send_batch([
-                                StateChange {
-                                    v: SimpleState::D(true),
-                                    update_same_frame: true,
-                                },
-                                StateChange {
-                                    v: SimpleState::D(false),
-                                    update_same_frame: false,
-                                },
-                            ])
+                            tm.schedule_update_same_frame(SimpleState::D(true));
+                            tm.schedule(SimpleState::D(false));
                         }
                     })
                     .system()
@@ -394,16 +410,24 @@ mod test {
         let marks = std::mem::take(&mut *world.get_resource_mut::<Vec<&'static str>>().unwrap());
         assert_eq!(marks, ["Updating SimpleState::A"]);
         world
-            .get_resource_mut::<Events<StateChange<SimpleState>>>()
+            .get_resource_mut::<StateScratchSpace<SimpleState>>()
             .unwrap()
-            .send(StateChange::to(SimpleState::B));
+            .transition_queue
+            .push_back(StateChange {
+                v: SimpleState::B,
+                update_same_frame: false,
+            });
         stage.run(&mut world);
         let marks = std::mem::take(&mut *world.get_resource_mut::<Vec<&'static str>>().unwrap());
         assert_eq!(marks, ["Exiting SimpleState::A", "Entering SimpleState::B"]);
         world
-            .get_resource_mut::<Events<StateChange<SimpleState>>>()
+            .get_resource_mut::<StateScratchSpace<SimpleState>>()
             .unwrap()
-            .send(StateChange::to(SimpleState::D(false)));
+            .transition_queue
+            .push_back(StateChange {
+                v: SimpleState::D(false),
+                update_same_frame: false,
+            });
         for _ in 0..10 {
             stage.run(&mut world);
         }

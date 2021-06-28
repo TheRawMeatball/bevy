@@ -75,7 +75,7 @@ fn setup_menu(
 }
 
 fn menu(
-    mut state: EventWriter<StateChange<AppState>>,
+    mut tm: TransitionManager<AppState>,
     button_materials: Res<ButtonMaterials>,
     mut interaction_query: Query<
         (&Interaction, &mut Handle<ColorMaterial>),
@@ -86,7 +86,7 @@ fn menu(
         match *interaction {
             Interaction::Clicked => {
                 *material = button_materials.pressed.clone();
-                state.send(StateChange::to(AppState::InGame));
+                tm.schedule(AppState::InGame);
             }
             Interaction::Hovered => {
                 *material = button_materials.hovered.clone();

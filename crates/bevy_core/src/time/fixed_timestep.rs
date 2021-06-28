@@ -1,10 +1,9 @@
 use crate::Time;
-use bevy_app::EventWriter;
 use bevy_ecs::{
     archetype::{Archetype, ArchetypeComponentId},
     component::{Component, ComponentId},
     query::Access,
-    schedule::{ShouldRun, StateChange},
+    schedule::{ShouldRun, TransitionManager},
     system::{IntoSystem, Local, Required, Res, ResMut, System, SystemId},
     world::World,
 };
@@ -217,25 +216,15 @@ fn ft_system<T: Component + Clone, Dt: Component>(
     locals: Required<(T, T, fn(&Dt) -> f64)>,
     mut acc: Local<f64>,
     time: Res<Time>,
-    mut ew: EventWriter<StateChange<T>>,
+    mut tm: TransitionManager<T>,
     dt: Res<Dt>,
 ) {
     let dt = (locals.2)(&dt);
     *acc += time.delta_seconds_f64();
     let t = (*acc % dt) as usize;
     *acc -= t as f64 * dt;
-    ew.send_batch(
-        std::iter::repeat([
-            StateChange {
-                v: locals.0.clone(),
-                update_same_frame: false,
-            },
-            StateChange {
-                v: locals.1.clone(),
-                update_same_frame: true,
-            },
-        ])
-        .take(t)
-        .flatten(),
-    );
+    for _ in 0..t {
+        tm.schedule_update_same_frame(locals.0.clone());
+        tm.schedule(locals.1.clone());
+    }
 }
