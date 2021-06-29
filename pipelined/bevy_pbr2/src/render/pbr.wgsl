@@ -86,19 +86,21 @@ struct StandardMaterial {
 };
 
 struct OmniLight {
-    color: vec4<f32>;
-    inverse_square_range: f32;
-    radius: f32;
-    position: vec3<f32>;
-    // mat4 viewproj
-    range: vec4<f32>;
     view_projection: mat4x4<f32>;
+    color: vec4<f32>;
+    range: vec4<f32>;
+    position: vec4<f32>;
+    inverse_square_range: vec4<f32>;
+    radius: vec4<f32>;
 };
 
 [[block]]
 struct Lights {
     ambient_color: vec4<f32>;
     num_lights: u32;
+    _pad0: u32;
+    _pad1: u32;
+    _pad2: u32;
     // NOTE: this array size must be kept in sync with the constants defined bevy_pbr2/src/render/light.rs
     // TODO: this can be removed if we move to storage buffers for light arrays
     omni_lights: array<OmniLight, 10>;
@@ -301,16 +303,16 @@ fn omni_light(
     let light_to_frag = light.position.xyz - world_position.xyz;
     let distance_square = dot(light_to_frag, light_to_frag);
     let rangeAttenuation =
-        getDistanceAttenuation(distance_square, light.inverse_square_range);
+        getDistanceAttenuation(distance_square, light.inverse_square_range.x);
 
     // Specular.
     // Representative Point Area Lights.
     // see http://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_notes_v2.pdf p14-16
     let a = roughness;
     let centerToRay = dot(light_to_frag, R) * R - light_to_frag;
-    let closestPoint = light_to_frag + centerToRay * saturate(light.radius * inverseSqrt(dot(centerToRay, centerToRay)));
+    let closestPoint = light_to_frag + centerToRay * saturate(light.radius.x * inverseSqrt(dot(centerToRay, centerToRay)));
     let LspecLengthInverse = inverseSqrt(dot(closestPoint, closestPoint));
-    let normalizationFactor = a / saturate(a + (light.radius * 0.5 * LspecLengthInverse));
+    let normalizationFactor = a / saturate(a + (light.radius.x * 0.5 * LspecLengthInverse));
     let specularIntensity = normalizationFactor * normalizationFactor;
 
     var L: vec3<f32> = closestPoint * LspecLengthInverse; // normalize() equivalent?
