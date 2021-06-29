@@ -452,7 +452,8 @@ fn fragment(in: FragmentInput) -> [[location(0)]] vec4<f32> {
             let depth = z / w;
 
             let bias = 0.0001;
-            let shadow = textureSample(shadow_textures, shadow_textures_sampler, vec4<f32>(frag_ls, i), depth - bias);
+            let shadow = textureSampleCompare(shadow_textures, shadow_textures_sampler, frag_ls, i, depth - bias);
+            // let shadow = 42.0;
             light_accum = light_accum + light_contrib * shadow;
         }
 
