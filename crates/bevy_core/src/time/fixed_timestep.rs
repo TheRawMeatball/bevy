@@ -202,29 +202,32 @@ impl System for FixedTimestep {
     }
 }
 
-pub fn make_ft_system<T: Component + Clone, Dt: Component>(
-    enable: T,
-    disable: T,
+pub fn make_ft_system<
+    T: Component + Clone,
+    Dt: Component,
+    F: Fn(&T, bool) -> T + Send + Sync + 'static,
+>(
+    setter: F,
     dt: fn(&Dt) -> f64,
 ) -> impl System<In = (), Out = ()> {
-    ft_system::<T, Dt>
+    ft_system::<T, Dt, F>
         .system()
-        .config(|(v, _, _, _, _)| *v = Some((enable, disable, dt)))
+        .config(|(v, _, _, _, _)| *v = Some((setter, dt)))
 }
 
-fn ft_system<T: Component + Clone, Dt: Component>(
-    locals: Required<(T, T, fn(&Dt) -> f64)>,
+fn ft_system<T: Component + Clone, Dt: Component, F: Fn(&T, bool) -> T + Send + Sync + 'static>(
+    locals: Required<(F, fn(&Dt) -> f64)>,
     mut acc: Local<f64>,
     time: Res<Time>,
     mut tm: TransitionManager<T>,
     dt: Res<Dt>,
 ) {
-    let dt = (locals.2)(&dt);
+    let dt = (locals.1)(&dt);
     *acc += time.delta_seconds_f64();
     let t = (*acc % dt) as usize;
     *acc -= t as f64 * dt;
     for _ in 0..t {
-        tm.schedule_update_same_frame(locals.0.clone());
-        tm.schedule(locals.1.clone());
+        tm.schedule_update_same_frame((locals.0)(tm.latest(), true));
+        tm.schedule((locals.0)(tm.latest(), false));
     }
 }

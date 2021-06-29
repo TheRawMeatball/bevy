@@ -36,12 +36,7 @@ fn main() {
         .add_system_set(
             SystemSet::on_update(GameState::PLAYING)
                 .with_system(make_ft_system(
-                    GameState::Playing {
-                        fixed_timestep: true,
-                    },
-                    GameState::Playing {
-                        fixed_timestep: false,
-                    },
+                    |_, fixed_timestep| GameState::Playing { fixed_timestep },
                     |_: &Game| 5.0,
                 ))
                 .with_system(move_player.system())
