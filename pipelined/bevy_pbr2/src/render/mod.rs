@@ -69,7 +69,7 @@ impl FromWorld for PbrShaders {
                         has_dynamic_offset: true,
                         // TODO: change this to ViewUniform::std140_size_static once crevice fixes this!
                         // Context: https://github.com/LPGhatguy/crevice/issues/29
-                        min_binding_size: BufferSize::new(1472),
+                        min_binding_size: BufferSize::new(512),
                     },
                     count: None,
                 },

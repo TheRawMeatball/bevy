@@ -33,12 +33,13 @@ pub struct ExtractedPointLight {
 #[repr(C)]
 #[derive(Copy, Clone, AsStd140, Default, Debug)]
 pub struct GpuLight {
-    proj: Mat4,
     color: Vec4,
-    range: Vec4,
+    // proj: Mat4,
     position: Vec4,
-    inverse_square_range: Vec4,
-    radius: Vec4,
+    inverse_square_range: f32,
+    radius: f32,
+    near: f32,
+    far: f32,
 }
 
 #[repr(C)]
@@ -47,7 +48,6 @@ pub struct GpuLights {
     lights: [GpuLight; MAX_OMNI_LIGHTS],
     ambient_color: Vec4,
     len: u32,
-    manual_padding: [u32; 3],
 }
 
 // NOTE: this must be kept in sync MAX_OMNI_LIGHTS in pbr.frag
@@ -290,7 +290,6 @@ pub fn prepare_lights(
         let mut gpu_lights = GpuLights {
             ambient_color: ambient_color.into(),
             len: lights.iter().len() as u32,
-            manual_padding: [0; 3],
             lights: [GpuLight::default(); MAX_OMNI_LIGHTS],
         };
 
@@ -342,13 +341,13 @@ pub fn prepare_lights(
                 // premultiply color by intensity
                 // we don't use the alpha at all, so no reason to multiply only [0..3]
                 color: (light.color.as_rgba_linear() * light.intensity).into(),
-                radius: Vec4::splat(light.radius),
+                radius: light.radius,
                 position: light.transform.translation.extend(0.0),
-                inverse_square_range: Vec4::splat(1.0 / (light.range * light.range)),
+                inverse_square_range: 1.0 / (light.range * light.range),
                 // this could technically be copied to the gpu from the light's ViewUniforms
                 // view_proj: projection * view_translation.compute_matrix(),
-                range: Vec4::new(0.1, light.range, 0.0, 0.0),
-                proj: projection,
+                near: 0.1,
+                far: light.range,
             };
         }
 
