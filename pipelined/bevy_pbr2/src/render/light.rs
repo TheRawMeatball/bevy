@@ -35,7 +35,7 @@ pub struct ExtractedPointLight {
 pub struct GpuLight {
     color: Vec4,
     // proj: Mat4,
-    position: Vec4,
+    position: Vec3,
     inverse_square_range: f32,
     radius: f32,
     near: f32,
@@ -342,7 +342,7 @@ pub fn prepare_lights(
                 // we don't use the alpha at all, so no reason to multiply only [0..3]
                 color: (light.color.as_rgba_linear() * light.intensity).into(),
                 radius: light.radius,
-                position: light.transform.translation.extend(0.0),
+                position: light.transform.translation,
                 inverse_square_range: 1.0 / (light.range * light.range),
                 // this could technically be copied to the gpu from the light's ViewUniforms
                 // view_proj: projection * view_translation.compute_matrix(),

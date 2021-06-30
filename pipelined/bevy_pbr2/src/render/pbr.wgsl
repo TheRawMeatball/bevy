@@ -88,7 +88,7 @@ struct StandardMaterial {
 struct OmniLight {
     color: vec4<f32>;
     // view_projection: mat4x4<f32>;
-    position: vec4<f32>;
+    position: vec3<f32>;
     inverse_square_range: f32;
     radius: f32;
     near: f32;
