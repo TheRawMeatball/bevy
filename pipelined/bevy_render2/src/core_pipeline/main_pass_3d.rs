@@ -55,7 +55,7 @@ impl Node for MainPass3dNode {
                 view: color_attachment_texture,
                 resolve_target: None,
                 ops: Operations {
-                    load: LoadOp::Clear(Color::rgb(0.4, 0.4, 0.4).into()),
+                    load: LoadOp::Load,
                     store: true,
                 },
             }],
