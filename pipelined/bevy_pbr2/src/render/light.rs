@@ -1,6 +1,6 @@
-use crate::{AmbientLight, ExtractedMeshes, MeshMeta, OmniLight, PbrShaders};
+use crate::{AmbientLight, ExtractedMeshes, MeshMeta, PbrShaders, PointLight};
 use bevy_ecs::{prelude::*, system::SystemState};
-use bevy_math::{Mat4, Vec3, Vec4};
+use bevy_math::{const_vec3, Mat4, Vec3, Vec4};
 use bevy_render2::{
     color::Color,
     core_pipeline::Transparent3dPhase,
@@ -11,7 +11,7 @@ use bevy_render2::{
     render_resource::*,
     renderer::{RenderContext, RenderDevice},
     texture::*,
-    view::{ExtractedView, ViewUniform, ViewUniformOffset},
+    view::{ExtractedView, ViewUniformOffset},
 };
 use bevy_transform::components::GlobalTransform;
 use crevice::std140::AsStd140;
@@ -34,27 +34,29 @@ pub struct ExtractedPointLight {
 #[derive(Copy, Clone, AsStd140, Default, Debug)]
 pub struct GpuLight {
     color: Vec4,
-    range: f32,
-    radius: f32,
+    // proj: Mat4,
     position: Vec3,
-    view_proj: Mat4,
+    inverse_square_range: f32,
+    radius: f32,
+    near: f32,
+    far: f32,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, AsStd140)]
 pub struct GpuLights {
     // TODO: this comes first to work around a WGSL alignment issue. We need to solve this issue before releasing the renderer rework
-    lights: [GpuLight; MAX_OMNI_LIGHTS],
+    lights: [GpuLight; MAX_POINT_LIGHTS],
     ambient_color: Vec4,
     len: u32,
 }
 
-// NOTE: this must be kept in sync MAX_OMNI_LIGHTS in pbr.frag
-pub const MAX_OMNI_LIGHTS: usize = 10;
+// NOTE: this must be kept in sync MAX_POINT_LIGHTS in pbr.frag
+pub const MAX_POINT_LIGHTS: usize = 10;
 pub const SHADOW_SIZE: Extent3d = Extent3d {
     width: 1024,
     height: 1024,
-    depth_or_array_layers: MAX_OMNI_LIGHTS as u32,
+    depth_or_array_layers: 6 * MAX_POINT_LIGHTS as u32,
 };
 pub const SHADOW_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
@@ -148,7 +150,7 @@ impl FromWorld for ShadowShaders {
                 topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: FrontFace::Ccw,
-                cull_mode: Some(Face::Back),
+                cull_mode: None,
                 polygon_mode: PolygonMode::Fill,
                 clamp_depth: false,
                 conservative: false,
@@ -176,7 +178,7 @@ impl FromWorld for ShadowShaders {
 pub fn extract_lights(
     mut commands: Commands,
     ambient_light: Res<AmbientLight>,
-    lights: Query<(Entity, &OmniLight, &GlobalTransform)>,
+    lights: Query<(Entity, &PointLight, &GlobalTransform)>,
 ) {
     commands.insert_resource(ExtractedAmbientLight {
         color: ambient_light.color,
@@ -188,13 +190,57 @@ pub fn extract_lights(
             intensity: light.intensity,
             range: light.range,
             radius: light.radius,
-            transform: transform.clone(),
+            transform: *transform,
         });
     }
 }
 
+// Can't do `Vec3::Y * -1.0` because mul isn't const
+const NEGATIVE_X: Vec3 = const_vec3!([-1.0, 0.0, 0.0]);
+const NEGATIVE_Y: Vec3 = const_vec3!([0.0, -1.0, 0.0]);
+const NEGATIVE_Z: Vec3 = const_vec3!([0.0, 0.0, -1.0]);
+
+struct CubeMapFace {
+    target: Vec3,
+    up: Vec3,
+}
+
+// see https://www.khronos.org/opengl/wiki/Cubemap_Texture
+const CUBE_MAP_FACES: [CubeMapFace; 6] = [
+    // 0 	GL_TEXTURE_CUBE_MAP_POSITIVE_X
+    CubeMapFace {
+        target: NEGATIVE_X,
+        up: NEGATIVE_Y,
+    },
+    // 1 	GL_TEXTURE_CUBE_MAP_NEGATIVE_X
+    CubeMapFace {
+        target: Vec3::X,
+        up: NEGATIVE_Y,
+    },
+    // 2 	GL_TEXTURE_CUBE_MAP_POSITIVE_Y
+    CubeMapFace {
+        target: NEGATIVE_Y,
+        up: Vec3::Z,
+    },
+    // 3 	GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
+    CubeMapFace {
+        target: Vec3::Y,
+        up: NEGATIVE_Z,
+    },
+    // 4 	GL_TEXTURE_CUBE_MAP_POSITIVE_Z
+    CubeMapFace {
+        target: NEGATIVE_Z,
+        up: NEGATIVE_Y,
+    },
+    // 5 	GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
+    CubeMapFace {
+        target: Vec3::Z,
+        up: NEGATIVE_Y,
+    },
+];
+
 pub struct ViewLight {
-    pub depth_texture: TextureView,
+    pub depth_texture_view: TextureView,
 }
 
 pub struct ViewLights {
@@ -244,63 +290,83 @@ pub fn prepare_lights(
         let mut gpu_lights = GpuLights {
             ambient_color: ambient_color.into(),
             len: lights.iter().len() as u32,
-            lights: [GpuLight::default(); MAX_OMNI_LIGHTS],
+            lights: [GpuLight::default(); MAX_POINT_LIGHTS],
         };
 
         // TODO: this should select lights based on relevance to the view instead of the first ones that show up in a query
-        for (i, light) in lights.iter().enumerate().take(MAX_OMNI_LIGHTS) {
-            let depth_texture_view =
-                light_depth_texture
-                    .texture
-                    .create_view(&TextureViewDescriptor {
-                        label: None,
-                        format: None,
-                        dimension: Some(TextureViewDimension::D2),
-                        aspect: TextureAspect::All,
-                        base_mip_level: 0,
-                        mip_level_count: None,
-                        base_array_layer: i as u32,
-                        array_layer_count: NonZeroU32::new(1),
-                    });
-
-            let view_transform = GlobalTransform::from_translation(light.transform.translation)
-                .looking_at(Vec3::default(), Vec3::Y);
-            // TODO: configure light projection based on light configuration
+        for (light_index, light) in lights.iter().enumerate().take(MAX_POINT_LIGHTS) {
             let projection =
                 Mat4::perspective_rh(std::f32::consts::FRAC_PI_2, 1.0, 0.1, light.range);
 
-            gpu_lights.lights[i] = GpuLight {
+            // ignore scale because we don't want to effectively scale light radius and range
+            // by applying those as a view transform to shadow map rendering of objects
+            // and ignore rotation because we want the shadow map projections to align with the axes
+            let view_translation = GlobalTransform::from_translation(light.transform.translation);
+
+            for (face_index, CubeMapFace { target, up }) in CUBE_MAP_FACES.iter().enumerate() {
+                // use the cubemap projection direction
+                let view_rotation = GlobalTransform::identity().looking_at(*target, *up);
+
+                let depth_texture_view =
+                    light_depth_texture
+                        .texture
+                        .create_view(&TextureViewDescriptor {
+                            label: None,
+                            format: None,
+                            dimension: Some(TextureViewDimension::D2),
+                            aspect: TextureAspect::All,
+                            base_mip_level: 0,
+                            mip_level_count: None,
+                            base_array_layer: (light_index * 6 + face_index) as u32,
+                            array_layer_count: NonZeroU32::new(1),
+                        });
+
+                let view_light_entity = commands
+                    .spawn()
+                    .insert_bundle((
+                        ViewLight { depth_texture_view },
+                        ExtractedView {
+                            width: SHADOW_SIZE.width,
+                            height: SHADOW_SIZE.height,
+                            transform: view_translation * view_rotation,
+                            projection,
+                        },
+                        RenderPhase::<ShadowPhase>::default(),
+                    ))
+                    .id();
+                view_lights.push(view_light_entity);
+            }
+
+            gpu_lights.lights[light_index] = GpuLight {
                 // premultiply color by intensity
                 // we don't use the alpha at all, so no reason to multiply only [0..3]
                 color: (light.color.as_rgba_linear() * light.intensity).into(),
-                radius: light.radius.into(),
-                position: light.transform.translation.into(),
-                range: 1.0 / (light.range * light.range),
-                // this could technically be copied to the gpu from the light's ViewUniforms
-                view_proj: projection * view_transform.compute_matrix().inverse(),
+                radius: light.radius,
+                position: light.transform.translation,
+                inverse_square_range: 1.0 / (light.range * light.range),
+                near: 0.1,
+                far: light.range,
+                // proj: projection,
             };
-
-            let view_light_entity = commands
-                .spawn()
-                .insert_bundle((
-                    ViewLight {
-                        depth_texture: depth_texture_view,
-                    },
-                    ExtractedView {
-                        width: SHADOW_SIZE.width,
-                        height: SHADOW_SIZE.height,
-                        transform: view_transform.clone(),
-                        projection,
-                    },
-                    RenderPhase::<ShadowPhase>::default(),
-                ))
-                .id();
-            view_lights.push(view_light_entity);
         }
+
+        let light_depth_texture_view =
+            light_depth_texture
+                .texture
+                .create_view(&TextureViewDescriptor {
+                    label: None,
+                    format: None,
+                    dimension: Some(TextureViewDimension::CubeArray),
+                    aspect: TextureAspect::All,
+                    base_mip_level: 0,
+                    mip_level_count: None,
+                    base_array_layer: 0,
+                    array_layer_count: None,
+                });
 
         commands.entity(entity).insert(ViewLights {
             light_depth_texture: light_depth_texture.texture,
-            light_depth_texture_view: light_depth_texture.default_view,
+            light_depth_texture_view,
             lights: view_lights,
             gpu_light_binding_index: light_meta.view_gpu_lights.push(gpu_lights),
         });
@@ -346,7 +412,7 @@ impl Node for ShadowPassNode {
         world: &World,
     ) -> Result<(), NodeRunError> {
         let view_entity = graph.get_input_entity(Self::IN_VIEW)?;
-        if let Some(view_lights) = self.main_view_query.get_manual(world, view_entity).ok() {
+        if let Ok(view_lights) = self.main_view_query.get_manual(world, view_entity) {
             for view_light_entity in view_lights.lights.iter().copied() {
                 let (view_light, shadow_phase) = self
                     .view_light_query
@@ -356,7 +422,7 @@ impl Node for ShadowPassNode {
                     label: Some("shadow_pass"),
                     color_attachments: &[],
                     depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                        view: &view_light.depth_texture,
+                        view: &view_light.depth_texture_view,
                         depth_ops: Some(Operations {
                             load: LoadOp::Clear(1.0),
                             store: true,
@@ -422,7 +488,8 @@ impl Draw for DrawShadowMesh {
             self.params.get(world);
         let view_uniform_offset = views.get(view).unwrap();
         let extracted_mesh = &extracted_meshes.into_inner().meshes[draw_key];
-        pass.set_render_pipeline(&shadow_shaders.into_inner().pipeline);
+        let shadow_shaders = shadow_shaders.into_inner();
+        pass.set_render_pipeline(&shadow_shaders.pipeline);
         pass.set_bind_group(
             0,
             light_meta
@@ -433,12 +500,13 @@ impl Draw for DrawShadowMesh {
             &[view_uniform_offset.offset],
         );
 
+        let transform_bindgroup_key = mesh_meta.mesh_transform_bind_group_key.unwrap();
         pass.set_bind_group(
             1,
             mesh_meta
                 .into_inner()
                 .mesh_transform_bind_group
-                .as_ref()
+                .get_value(transform_bindgroup_key)
                 .unwrap(),
             &[extracted_mesh.transform_binding_offset],
         );

@@ -2,7 +2,18 @@ use crate::Sprite;
 use bevy_asset::{Assets, Handle};
 use bevy_ecs::{prelude::*, system::SystemState};
 use bevy_math::{Mat4, Vec2, Vec3, Vec4Swizzles};
-use bevy_render2::{core_pipeline::Transparent2dPhase, mesh::{shape::Quad, Indices, Mesh, VertexAttributeValues}, render_asset::RenderAssets, render_graph::{Node, NodeRunError, RenderGraphContext}, render_phase::{Draw, DrawFunctions, Drawable, RenderPhase, TrackedRenderPass}, render_resource::*, renderer::{RenderContext, RenderDevice}, shader::Shader, texture::{BevyDefault, Image}, view::{ViewMeta, ViewUniform, ViewUniformOffset}};
+use bevy_render2::{
+    core_pipeline::Transparent2dPhase,
+    mesh::{shape::Quad, Indices, Mesh, VertexAttributeValues},
+    render_asset::RenderAssets,
+    render_graph::{Node, NodeRunError, RenderGraphContext},
+    render_phase::{Draw, DrawFunctions, Drawable, RenderPhase, TrackedRenderPass},
+    render_resource::*,
+    renderer::{RenderContext, RenderDevice},
+    shader::Shader,
+    texture::{BevyDefault, Image},
+    view::{ViewMeta, ViewUniform, ViewUniformOffset},
+};
 use bevy_transform::components::GlobalTransform;
 use bevy_utils::slab::{FrameSlabMap, FrameSlabMapKey};
 use bytemuck::{Pod, Zeroable};
@@ -201,7 +212,7 @@ pub fn prepare_sprites(
     extracted_sprites: Res<ExtractedSprites>,
 ) {
     // dont create buffers when there are no sprites
-    if extracted_sprites.sprites.len() == 0 {
+    if extracted_sprites.sprites.is_empty() {
         return;
     }
 
@@ -266,6 +277,7 @@ pub fn prepare_sprites(
     sprite_meta.indices.write_to_staging_buffer(&render_device);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn queue_sprites(
     draw_functions: Res<DrawFunctions>,
     render_device: Res<RenderDevice>,
@@ -276,6 +288,10 @@ pub fn queue_sprites(
     gpu_images: Res<RenderAssets<Image>>,
     mut views: Query<&mut RenderPhase<Transparent2dPhase>>,
 ) {
+    if view_meta.uniforms.is_empty() {
+        return;
+    }
+
     // TODO: define this without needing to check every frame
     sprite_meta.view_bind_group.get_or_insert_with(|| {
         render_device.create_bind_group(&BindGroupDescriptor {

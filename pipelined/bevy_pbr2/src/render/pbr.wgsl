@@ -40,7 +40,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     // of normals
     out.world_normal = mat3x3<f32>(mesh.transform.x.xyz, mesh.transform.y.xyz, mesh.transform.z.xyz) * vertex.normal;
     return out;
-} 
+}
 
 // From the Filament design doc
 // https://google.github.io/filament/Filament.html#table_symbols
@@ -87,19 +87,21 @@ struct StandardMaterial {
     flags: u32;
 };
 
-struct OmniLight {
+struct PointLight {
     color: vec4<f32>;
-    range: f32;
-    radius: f32;
+    // projection: mat4x4<f32>;
     position: vec3<f32>;
-    view_projection: mat4x4<f32>;
+    inverse_square_range: f32;
+    radius: f32;
+    near: f32;
+    far: f32;
 };
 
 [[block]]
 struct Lights {
     // NOTE: this array size must be kept in sync with the constants defined bevy_pbr2/src/render/light.rs
     // TODO: this can be removed if we move to storage buffers for light arrays
-    omni_lights: array<OmniLight, 10>;
+    point_lights: array<PointLight, 10>;
     ambient_color: vec4<f32>;
     num_lights: u32;
 };
@@ -115,7 +117,7 @@ let FLAGS_UNLIT_BIT: u32                      = 32u;
 [[group(0), binding(1)]]
 var lights: Lights;
 [[group(0), binding(2)]]
-var shadow_textures: texture_depth_2d_array;
+var shadow_textures: texture_depth_cube_array;
 [[group(0), binding(3)]]
 var shadow_textures_sampler: sampler_comparison;
 
@@ -294,14 +296,14 @@ fn reinhard_extended_luminance(color: vec3<f32>, max_white_l: f32) -> vec3<f32> 
     return change_luminance(color, l_new);
 }
 
-fn omni_light(
-    world_position: vec3<f32>, light: OmniLight, roughness: f32, NdotV: f32, N: vec3<f32>, V: vec3<f32>,
+fn point_light(
+    world_position: vec3<f32>, light: PointLight, roughness: f32, NdotV: f32, N: vec3<f32>, V: vec3<f32>,
     R: vec3<f32>, F0: vec3<f32>, diffuseColor: vec3<f32>
 ) -> vec3<f32> {
     let light_to_frag = light.position.xyz - world_position.xyz;
     let distance_square = dot(light_to_frag, light_to_frag);
     let rangeAttenuation =
-        getDistanceAttenuation(distance_square, light.range);
+        getDistanceAttenuation(distance_square, light.inverse_square_range);
 
     // Specular.
     // Representative Point Area Lights.
@@ -346,17 +348,41 @@ fn omni_light(
     return ((diffuse + specular_light) * light.color.rgb) * (rangeAttenuation * NoL);
 }
 
-fn fetch_shadow(light_id: i32, homogeneous_coords: vec4<f32>) -> f32 {
-    if (homogeneous_coords.w <= 0.0) {
-        return 1.0;
-    }
-    // compensate for the Y-flip difference between the NDC and texture coordinates
-    let flip_correction = vec2<f32>(0.5, -0.5);
-    let proj_correction = 1.0 / homogeneous_coords.w;
-    // compute texture coordinates for shadow lookup
-    let light_local = homogeneous_coords.xy * flip_correction * proj_correction + vec2<f32>(0.5, 0.5);
+fn fetch_shadow(light_id: i32, frag_position: vec4<f32>) -> f32 {
+    let light = lights.point_lights[light_id];
+
+    // because the shadow maps align with the axes and the frustum planes are at 45 degrees
+    // we can get the worldspace depth by taking the largest absolute axis
+    let frag_ls = light.position.xyz - frag_position.xyz;
+    let abs_position_ls = abs(frag_ls);
+    let major_axis_magnitude = max(abs_position_ls.x, max(abs_position_ls.y, abs_position_ls.z));
+
+    // do a full projection
+    // vec4 clip = light.projection * vec4(0.0, 0.0, -major_axis_magnitude, 1.0);
+    // float depth = (clip.z / clip.w);
+
+    // alternatively do only the necessary multiplications using near/far
+    let proj_r = light.far / (light.near - light.far);
+    let z = -major_axis_magnitude * proj_r + light.near * proj_r;
+    let w = major_axis_magnitude;
+    let depth = z / w;
+
+    // let shadow = texture(samplerCubeArrayShadow(t_Shadow, s_Shadow), vec4(frag_ls, i), depth - bias);
+
+    // manual depth testing
+    // float shadow = texture(samplerCubeArray(t_Shadow, s_Shadow), vec4(-frag_ls, 6 * i)).r;
+    // shadow = depth > shadow ? 0.0 : 1.0;
+    // o_Target = vec4(vec3(shadow * 20 - 19, depth * 20 - 19, 0.0), 1.0);
+    // o_Target = vec4(vec3(shadow * 20 - 19), 1.0);
+
     // do the lookup, using HW PCF and comparison
-    return textureSampleCompare(shadow_textures, shadow_textures_sampler, light_local, i32(light_id), homogeneous_coords.z * proj_correction);
+    // NOTE: Due to the non-uniform control flow above, we must use the Level variant of
+    //       textureSampleCompare to avoid undefined behaviour due to some of the fragments in
+    //       a quad (2x2 fragments) being processed not being sampled, and this messing with
+    //       mip-mapping functionality. The shadow maps have no mipmaps so Level just samples
+    //       from LOD 0.
+    let bias = 0.0001;
+    return textureSampleCompareLevel(shadow_textures, shadow_textures_sampler, frag_ls, i32(light_id), depth - bias);
 }
 
 struct FragmentInput {
@@ -422,7 +448,7 @@ fn fragment(in: FragmentInput) -> [[location(0)]] vec4<f32> {
         // #    endif
 
         var V: vec3<f32>;
-        if (view.view_proj.z.z != 1.0) { // If the projection is not orthographic
+        if (view.view_proj.w.w != 1.0) { // If the projection is not orthographic
             // Only valid for a perpective projection
             V = normalize(view.world_position.xyz - in.world_position.xyz);
         } else {
@@ -446,9 +472,9 @@ fn fragment(in: FragmentInput) -> [[location(0)]] vec4<f32> {
         // accumulate color
         var light_accum: vec3<f32> = vec3<f32>(0.0);
         for (var i: i32 = 0; i < i32(lights.num_lights); i = i + 1) {
-            let light = lights.omni_lights[i];
-            let light_contrib = omni_light(in.world_position.xyz, light, roughness, NdotV, N, V, R, F0, diffuse_color);
-            let shadow = fetch_shadow(i, light.view_projection * in.world_position);
+            let light = lights.point_lights[i];
+            let light_contrib = point_light(in.world_position.xyz, light, roughness, NdotV, N, V, R, F0, diffuse_color);
+            let shadow = fetch_shadow(i, in.world_position);
             light_accum = light_accum + light_contrib * shadow;
         }
 
