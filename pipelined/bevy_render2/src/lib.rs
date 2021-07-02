@@ -12,7 +12,7 @@ pub mod texture;
 pub mod view;
 
 pub use once_cell;
-use wgpu::BackendBit;
+use wgpu::{BackendBit, Features};
 
 use crate::{
     camera::CameraPlugin,
@@ -63,7 +63,10 @@ impl Plugin for RenderPlugin {
                     power_preference: wgpu::PowerPreference::HighPerformance,
                     ..Default::default()
                 },
-                &wgpu::DeviceDescriptor::default(),
+                &wgpu::DeviceDescriptor {
+                    features: Features::CLEAR_COMMANDS,
+                    ..Default::default()
+                },
             ));
         app.insert_resource(device.clone())
             .insert_resource(queue.clone());
